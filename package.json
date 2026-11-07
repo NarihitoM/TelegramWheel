@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tsx watch src/dev.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test src/**/*.test.ts",
+    "test": "node --import tsx --test \"src/**/*.test.ts\"",
     "userbot:login": "tsx scripts/userbot-login.ts",
     "webhook:set": "tsx scripts/set-webhook.ts",
     "db:migrate": "prisma migrate dev",

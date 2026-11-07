@@ -140,3 +140,20 @@ prisma/schema.prisma            Database schema
 - The bot reads up to 10,000 members per chat.
 - The image shows up to 15 names per group. The text message always has the full list.
 - Names in scripts the bundled font doesn't cover may not render in the image. The text message is unaffected.
+
+## CI/CD
+
+`.github/workflows/ci.yml` runs on every push and pull request to `main`:
+
+1. **check**: `npm ci`, `npm run typecheck`, `npm test`
+2. **deploy**: on pushes to `main` that pass the checks, builds and deploys to Vercel production
+
+The deploy job needs these repository secrets (Settings -> Secrets and variables -> Actions):
+
+| Secret | Where to find it |
+| --- | --- |
+| `VERCEL_TOKEN` | Vercel -> Account Settings -> Tokens |
+| `VERCEL_ORG_ID` | `.vercel/project.json` after running `npx vercel link` |
+| `VERCEL_PROJECT_ID` | `.vercel/project.json` after running `npx vercel link` |
+
+If the secrets are not set, the deploy job skips itself. If you deploy with this workflow, turn off Vercel's own Git deployments (Project Settings -> Git) so each push is deployed only once.
