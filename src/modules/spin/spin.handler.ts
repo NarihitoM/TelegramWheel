@@ -190,7 +190,7 @@ spinHandler.command("wheel", async (ctx) => {
   if (ctx.chat.type === "private") {
     const chats = await findSharedChats(ctx, user.id);
     if (chats.length === 0) {
-      await ctx.reply("I couldn't find a group or channel we share. Add me to one first.");
+      await ctx.reply("Couldn't find a group or channel. Please try again.");
       return;
     }
     const panel = await ctx.reply("Which chat should I spin?", { reply_markup: pickChatKeyboard(user.id, chats) });
@@ -230,7 +230,7 @@ async function handleAction(ctx: BotContext, callback: WheelCallback): Promise<v
       }
       const chat = await ctx.api.getChat(value).catch(() => null);
       if (!chat || !isGroupChat(chat)) {
-        await closePanel(ctx, "I can't access that chat anymore.");
+        await closePanel(ctx, "Couldn't open that chat. Please try again.");
         return;
       }
       await startWheel(ctx, ownerId, chat.id, chat.title);
