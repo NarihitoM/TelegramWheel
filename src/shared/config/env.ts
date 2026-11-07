@@ -16,17 +16,4 @@ export const env = {
   get webhookUrl() {
     return requireEnv("WEBHOOK_URL");
   },
-  get tgApiId() {
-    const id = Number(requireEnv("TG_API_ID"));
-    if (!Number.isInteger(id)) {
-      throw new Error("TG_API_ID must be a number");
-    }
-    return id;
-  },
-  get tgApiHash() {
-    return requireEnv("TG_API_HASH");
-  },
-  get tgSession() {
-    return requireEnv("TG_SESSION");
-  },
 };

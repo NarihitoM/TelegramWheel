@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   decodeCallback,
+  decodePickChat,
   encodeCallback,
+  encodePickChat,
   groupCountOptions,
   groupSizeOptions,
   hasCustomGroupCount,
@@ -86,12 +88,19 @@ describe("keyboard options", () => {
   });
 
   it("round-trips callback data", () => {
-    const data = encodeCallback({ ownerId: 5149489161, action: "pk", value: -1001234567890 });
+    const data = encodeCallback({ wheelId: 2147483647, action: "tc", value: 8 });
     assert.ok(data.length <= 64);
-    assert.deepEqual(decodeCallback(data), { ownerId: 5149489161, action: "pk", value: -1001234567890 });
-    assert.deepEqual(decodeCallback("w:1:go"), { ownerId: 1, action: "go", value: undefined });
+    assert.deepEqual(decodeCallback(data), { wheelId: 2147483647, action: "tc", value: 8 });
+    assert.deepEqual(decodeCallback("w:1:j"), { wheelId: 1, action: "j", value: undefined });
+    assert.deepEqual(decodeCallback("w:1:start"), { wheelId: 1, action: "start", value: undefined });
     assert.equal(decodeCallback("w:1:nope"), null);
     assert.equal(decodeCallback("x:1:go"), null);
+  });
+
+  it("round-trips chat picker data", () => {
+    assert.equal(decodePickChat(encodePickChat(-1001234567890)), -1001234567890);
+    assert.equal(decodePickChat("p:abc"), null);
+    assert.equal(decodePickChat("w:1:go"), null);
   });
 });
 

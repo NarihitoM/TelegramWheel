@@ -3,31 +3,41 @@ import { InlineKeyboard } from "grammy";
 export const MAX_BUTTONS = 8;
 const BUTTONS_PER_ROW = 4;
 
-export type WheelAction = "tc" | "ts" | "cc" | "cs" | "go" | "back" | "x" | "pk";
+export type WheelAction = "j" | "l" | "start" | "tc" | "ts" | "cc" | "cs" | "go" | "back" | "x";
 
 export interface WheelCallback {
-  ownerId: number;
+  wheelId: number;
   action: WheelAction;
   value?: number;
 }
 
-const ACTIONS: readonly WheelAction[] = ["tc", "ts", "cc", "cs", "go", "back", "x", "pk"];
+const ACTIONS: readonly WheelAction[] = ["j", "l", "start", "tc", "ts", "cc", "cs", "go", "back", "x"];
 
-export function encodeCallback({ ownerId, action, value }: WheelCallback): string {
-  return value === undefined ? `w:${ownerId}:${action}` : `w:${ownerId}:${action}:${value}`;
+export function encodeCallback({ wheelId, action, value }: WheelCallback): string {
+  return value === undefined ? `w:${wheelId}:${action}` : `w:${wheelId}:${action}:${value}`;
 }
 
 export function decodeCallback(data: string): WheelCallback | null {
-  const [prefix, owner, action, raw] = data.split(":");
-  const ownerId = Number(owner);
-  if (prefix !== "w" || !Number.isInteger(ownerId) || !ACTIONS.includes(action as WheelAction)) {
+  const [prefix, id, action, raw] = data.split(":");
+  const wheelId = Number(id);
+  if (prefix !== "w" || !Number.isInteger(wheelId) || !ACTIONS.includes(action as WheelAction)) {
     return null;
   }
   const value = raw === undefined ? undefined : Number(raw);
   if (value !== undefined && !Number.isInteger(value)) {
     return null;
   }
-  return { ownerId, action: action as WheelAction, value };
+  return { wheelId, action: action as WheelAction, value };
+}
+
+export function encodePickChat(chatId: number): string {
+  return `p:${chatId}`;
+}
+
+export function decodePickChat(data: string): number | null {
+  const [prefix, raw] = data.split(":");
+  const chatId = Number(raw);
+  return prefix === "p" && Number.isInteger(chatId) ? chatId : null;
 }
 
 function range(from: number, to: number): number[] {
@@ -55,18 +65,17 @@ export function hasCustomGroupSize(memberCount: number, groupCount: number): boo
 }
 
 function numberKeyboard(
-  ownerId: number,
+  wheelId: number,
   values: number[],
   pickAction: WheelAction,
   customAction: WheelAction | null,
-  withBack: boolean,
 ): InlineKeyboard {
   const keyboard = new InlineKeyboard();
   const buttons = values.map((value) =>
-    InlineKeyboard.text(String(value), encodeCallback({ ownerId, action: pickAction, value })),
+    InlineKeyboard.text(String(value), encodeCallback({ wheelId, action: pickAction, value })),
   );
   if (customAction) {
-    buttons.push(InlineKeyboard.text("Custom", encodeCallback({ ownerId, action: customAction })));
+    buttons.push(InlineKeyboard.text("Custom", encodeCallback({ wheelId, action: customAction })));
   }
   buttons.forEach((button, index) => {
     if (index > 0 && index % BUTTONS_PER_ROW === 0) {
@@ -75,45 +84,50 @@ function numberKeyboard(
     keyboard.add(button);
   });
 
-  keyboard.row();
-  if (withBack) {
-    keyboard.text("Back", encodeCallback({ ownerId, action: "back" }));
-  }
-  keyboard.text("Cancel", encodeCallback({ ownerId, action: "x" }));
-  return keyboard;
+  return keyboard
+    .row()
+    .text("Back", encodeCallback({ wheelId, action: "back" }))
+    .text("Cancel", encodeCallback({ wheelId, action: "x" }));
 }
 
-export function groupCountKeyboard(ownerId: number, memberCount: number): InlineKeyboard {
+export function joinKeyboard(wheelId: number): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("Join", encodeCallback({ wheelId, action: "j" }))
+    .text("Leave", encodeCallback({ wheelId, action: "l" }))
+    .row()
+    .text("Start", encodeCallback({ wheelId, action: "start" }))
+    .text("Cancel", encodeCallback({ wheelId, action: "x" }));
+}
+
+export function groupCountKeyboard(wheelId: number, memberCount: number): InlineKeyboard {
   return numberKeyboard(
-    ownerId,
+    wheelId,
     groupCountOptions(memberCount),
     "tc",
     hasCustomGroupCount(memberCount) ? "cc" : null,
-    false,
   );
 }
 
-export function groupSizeKeyboard(ownerId: number, memberCount: number, groupCount: number): InlineKeyboard {
+export function groupSizeKeyboard(wheelId: number, memberCount: number, groupCount: number): InlineKeyboard {
   return numberKeyboard(
-    ownerId,
+    wheelId,
     groupSizeOptions(memberCount, groupCount),
     "ts",
     hasCustomGroupSize(memberCount, groupCount) ? "cs" : null,
-    true,
   );
 }
 
-export function confirmKeyboard(ownerId: number): InlineKeyboard {
+export function confirmKeyboard(wheelId: number): InlineKeyboard {
   return new InlineKeyboard()
-    .text("Spin", encodeCallback({ ownerId, action: "go" }))
-    .text("Back", encodeCallback({ ownerId, action: "back" }))
-    .text("Cancel", encodeCallback({ ownerId, action: "x" }));
+    .text("Spin", encodeCallback({ wheelId, action: "go" }))
+    .text("Back", encodeCallback({ wheelId, action: "back" }))
+    .text("Cancel", encodeCallback({ wheelId, action: "x" }));
 }
 
-export function pickChatKeyboard(ownerId: number, chats: { id: number; title: string }[]): InlineKeyboard {
+export function pickChatKeyboard(chats: { id: number; title: string }[]): InlineKeyboard {
   const keyboard = new InlineKeyboard();
   chats.forEach((chat) => {
-    keyboard.text(chat.title, encodeCallback({ ownerId, action: "pk", value: chat.id })).row();
+    keyboard.text(chat.title, encodePickChat(chat.id)).row();
   });
-  return keyboard.text("Cancel", encodeCallback({ ownerId, action: "x" }));
+  return keyboard;
 }

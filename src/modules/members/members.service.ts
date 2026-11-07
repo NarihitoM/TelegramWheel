@@ -1,49 +1,67 @@
-import { Api, errors } from "telegram";
-import { withUserbot } from "../../shared/lib/userbot.js";
+import { Prisma } from "@prisma/client";
+import type { Api } from "grammy";
+import type { User } from "grammy/types";
+import { prisma } from "../../shared/lib/prisma.js";
 import type { Member } from "../spin/spin.types.js";
 
-const DIALOG_LIMIT = 500;
-const PARTICIPANT_LIMIT = 10000;
-
-export class MembersError extends Error {}
-
-const RPC_MESSAGES: Record<string, string> = {
-  CHAT_ADMIN_REQUIRED: "The helper account must be an admin of this chat to read its members.",
-  CHANNEL_PRIVATE: "The helper account can't access this chat. Add it to the chat first.",
-};
-
-function toMember(user: Api.User): Member {
-  const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+export function toMember(user: User): Member {
+  const name = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
   return {
-    id: user.id.toString(),
-    name: name || user.username || `User ${user.id.toString()}`,
-    username: user.username ?? undefined,
+    id: String(user.id),
+    name: name || user.username || `User ${user.id}`,
+    username: user.username,
   };
 }
 
-export async function fetchChatMembers(chatId: number): Promise<Member[]> {
+function isMissingChat(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003";
+}
+
+export async function rememberMembers(chatId: number, users: User[]): Promise<boolean> {
+  const members = users.filter((user) => !user.is_bot).map(toMember);
+  if (members.length === 0) {
+    return true;
+  }
+
   try {
-    return await withUserbot(async (client) => {
-      const dialogs = await client.getDialogs({ limit: DIALOG_LIMIT });
-      const dialog = dialogs.find((item) => item.id?.toString() === String(chatId));
-      if (!dialog?.entity) {
-        throw new MembersError("The helper account is not in this chat. Add it to the chat first.");
-      }
-
-      const me = await client.getMe();
-      const participants = await client.getParticipants(dialog.entity, { limit: PARTICIPANT_LIMIT });
-
-      return participants
-        .filter((user) => !user.bot && !user.deleted && !user.id.equals(me.id))
-        .map(toMember);
-    });
+    await prisma.$transaction(
+      members.map((member) =>
+        prisma.knownMember.upsert({
+          where: { chatId_userId: { chatId: BigInt(chatId), userId: BigInt(member.id) } },
+          create: { chatId: BigInt(chatId), userId: BigInt(member.id), name: member.name, username: member.username },
+          update: { name: member.name, username: member.username ?? null },
+        }),
+      ),
+    );
+    return true;
   } catch (error) {
-    if (error instanceof MembersError) {
-      throw error;
-    }
-    if (error instanceof errors.RPCError) {
-      throw new MembersError(RPC_MESSAGES[error.errorMessage] ?? `Telegram error: ${error.errorMessage}`);
+    if (isMissingChat(error)) {
+      return false;
     }
     throw error;
   }
+}
+
+export async function forgetMember(chatId: number, userId: number): Promise<void> {
+  await prisma.knownMember.deleteMany({ where: { chatId: BigInt(chatId), userId: BigInt(userId) } });
+}
+
+export async function listKnownMembers(chatId: number): Promise<Member[]> {
+  const members = await prisma.knownMember.findMany({
+    where: { chatId: BigInt(chatId) },
+    orderBy: { name: "asc" },
+  });
+  return members.map((member) => ({
+    id: member.userId.toString(),
+    name: member.name,
+    username: member.username ?? undefined,
+  }));
+}
+
+export async function syncAdmins(api: Api, chatId: number): Promise<void> {
+  const admins = await api.getChatAdministrators(chatId).catch(() => []);
+  await rememberMembers(
+    chatId,
+    admins.map((admin) => admin.user),
+  );
 }

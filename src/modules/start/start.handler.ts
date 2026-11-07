@@ -1,22 +1,25 @@
-import { Composer } from "grammy";
-import type { BotContext } from "../../shared/types/context.js";
+import { Composer, type Context } from "grammy";
 
 export const START_MESSAGE = [
   "<b>Spin Wheel Bot</b>",
   "Randomly split the members of a group or channel into teams.",
   "",
   "<b>How to use</b>",
-  "1. Add me to your group or channel.",
-  "2. Add the helper account too (it must be an admin in channels).",
-  "3. Send /wheel, then pick how many groups and how many members per group.",
-  "4. Tap <b>Spin</b> and I post the result as text and as an image.",
+  "1. Add me to your group or channel and make me an admin.",
+  "2. Send /wheel. Members I know are already in the list.",
+  "3. Anyone missing taps <b>Join</b>. Anyone who wants out taps <b>Leave</b>.",
+  "4. The starter taps <b>Start</b>, picks how many groups and members per group.",
+  "5. Tap <b>Spin</b> and I post the result as text and as an image.",
+  "",
+  "<b>Who is in the list</b>",
+  "Admins, people who join after I'm added, and anyone who sends a message. Telegram doesn't let bots see quiet members, so they tap Join.",
   "",
   "<b>Channels</b>",
   "Send /wheel to me here in private chat and choose the channel.",
   "",
   "<b>Good to know</b>",
   "- Anyone in the chat can start a wheel.",
-  "- Only the person who started it can press its buttons.",
+  "- Only the starter can press Start, Spin and the number buttons.",
   "- Wait 10 seconds between wheels in the same chat.",
   "- Members who don't fit into a group are listed as Not picked.",
   "",
@@ -26,6 +29,6 @@ export const START_MESSAGE = [
   "/credit - who made this bot",
 ].join("\n");
 
-export const startHandler = new Composer<BotContext>();
+export const startHandler = new Composer<Context>();
 
 startHandler.command(["start", "help"], (ctx) => ctx.reply(START_MESSAGE, { parse_mode: "HTML" }));

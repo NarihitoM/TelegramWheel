@@ -1,0 +1,13 @@
+model Chat {
+  id          BigInt        @id
+  title       String
+  type        String
+  addedById   BigInt?
+  active      Boolean       @default(true)
+  lastWheelAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  spins       Spin[]
+  wheels      Wheel[]
+  members     KnownMember[]
+}

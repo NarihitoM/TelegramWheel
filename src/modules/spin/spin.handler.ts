@@ -1,145 +1,153 @@
-import { Composer, GrammyError, InputFile, type InlineKeyboard } from "grammy";
+import { Composer, GrammyError, InputFile, type Api, type Context, type InlineKeyboard } from "grammy";
 import { prisma } from "../../shared/lib/prisma.js";
-import type { BotContext, WheelSession } from "../../shared/types/context.js";
 import { claimWheelCooldown, isGroupChat, listActiveChats, saveChat } from "../chat/chat.service.js";
-import { fetchChatMembers, MembersError } from "../members/members.service.js";
+import { listKnownMembers, rememberMembers, syncAdmins, toMember } from "../members/members.service.js";
 import { renderResultImage } from "./spin.image.js";
 import {
   confirmKeyboard,
   decodeCallback,
+  decodePickChat,
   groupCountKeyboard,
   groupSizeKeyboard,
   groupSizeOptions,
   hasCustomGroupSize,
+  joinKeyboard,
   maxGroupSize,
   pickChatKeyboard,
   type WheelCallback,
 } from "./spin.keyboard.js";
 import { escapeHtml, formatResult } from "./spin.message.js";
 import { isValidConfig, splitIntoTeams } from "./spin.service.js";
+import type { Member } from "./spin.types.js";
+import {
+  addWheelMember,
+  createWheel,
+  findWheelAwaitingInput,
+  getWheel,
+  moveWheel,
+  OPEN_STEPS,
+  removeWheelMember,
+  setWheelMessage,
+  type Wheel,
+} from "./wheel.service.js";
 
 const PICK_CHAT_LIMIT = 30;
+const MAX_LISTED_MEMBERS = 40;
+const ENDED_MESSAGE = "This wheel has ended. Send /wheel to start a new one.";
 
-export const spinHandler = new Composer<BotContext>();
+export const spinHandler = new Composer<Context>();
 
-function isCountStep(step: WheelSession["step"]): boolean {
-  return step === "teamCount" || step === "customTeamCount";
-}
-
-function isSizeStep(step: WheelSession["step"]): boolean {
-  return step === "teamSize" || step === "customTeamSize";
-}
-
-function idleSession(): WheelSession {
-  return { step: "idle", members: [] };
-}
-
-async function editPanel(ctx: BotContext, text: string, keyboard?: InlineKeyboard): Promise<void> {
-  const { panelChatId, panelMessageId } = ctx.session;
-  if (panelChatId === undefined || panelMessageId === undefined) {
+async function editPanel(api: Api, wheel: Wheel, text: string, keyboard?: InlineKeyboard): Promise<void> {
+  if (wheel.messageId === null) {
     return;
   }
   try {
-    await ctx.api.editMessageText(panelChatId, panelMessageId, text, {
-      parse_mode: "HTML",
-      reply_markup: keyboard,
-    });
+    await api.editMessageText(wheel.chatId, wheel.messageId, text, { parse_mode: "HTML", reply_markup: keyboard });
   } catch (error) {
-    if (!(error instanceof GrammyError && error.description.includes("message is not modified"))) {
+    if (!(error instanceof GrammyError)) {
       throw error;
     }
   }
 }
 
-async function closePanel(ctx: BotContext, text: string): Promise<void> {
-  await editPanel(ctx, text);
-  ctx.session = idleSession();
+function joinText(wheel: Wheel): string {
+  const owner = escapeHtml(wheel.ownerName);
+  const listed = wheel.members.slice(0, MAX_LISTED_MEMBERS).map((member, index) => `${index + 1}. ${escapeHtml(member.name)}`);
+  const hidden = wheel.members.length - listed.length;
+  return [
+    `<b>Spin Wheel</b> by ${owner}`,
+    "Not in the list? Tap Join. Want out? Tap Leave.",
+    `${owner} taps Start when everyone is in.`,
+    "",
+    `<b>Members (${wheel.members.length})</b>`,
+    ...(listed.length > 0 ? listed : ["No one yet"]),
+    ...(hidden > 0 ? [`+${hidden} more`] : []),
+  ].join("\n");
 }
 
-async function showGroupCount(ctx: BotContext, ownerId: number): Promise<void> {
-  const total = ctx.session.members.length;
-  ctx.session.step = "teamCount";
-  ctx.session.teamCount = undefined;
-  ctx.session.teamSize = undefined;
+async function showJoin(api: Api, wheel: Wheel): Promise<void> {
+  await editPanel(api, wheel, joinText(wheel), joinKeyboard(wheel.id));
+}
+
+async function showGroupCount(api: Api, wheel: Wheel): Promise<void> {
+  await moveWheel(wheel.id, OPEN_STEPS, { step: "teamCount", teamCount: null, teamSize: null });
   await editPanel(
-    ctx,
-    `<b>${escapeHtml(ctx.session.targetTitle ?? "")}</b>\nFound ${total} members. How many groups?`,
-    groupCountKeyboard(ownerId, total),
+    api,
+    wheel,
+    `${wheel.members.length} members are in. How many groups?`,
+    groupCountKeyboard(wheel.id, wheel.members.length),
   );
 }
 
-async function showConfirm(ctx: BotContext, ownerId: number): Promise<void> {
-  const { members, teamCount = 0, teamSize = 0 } = ctx.session;
-  const leftOut = members.length - teamCount * teamSize;
-  ctx.session.step = "confirm";
+async function showConfirm(api: Api, wheel: Wheel, teamCount: number, teamSize: number): Promise<void> {
+  await moveWheel(wheel.id, OPEN_STEPS, { step: "confirm", teamCount, teamSize });
+  const leftOut = wheel.members.length - teamCount * teamSize;
   await editPanel(
-    ctx,
-    `${teamCount} groups x ${teamSize} members from ${members.length} members` +
+    api,
+    wheel,
+    `${teamCount} groups x ${teamSize} members from ${wheel.members.length} members` +
       (leftOut > 0 ? `, ${leftOut} left out` : "") +
       ". Spin?",
-    confirmKeyboard(ownerId),
+    confirmKeyboard(wheel.id),
   );
 }
 
-async function showGroupSize(ctx: BotContext, ownerId: number): Promise<void> {
-  const total = ctx.session.members.length;
-  const teamCount = ctx.session.teamCount ?? 2;
+async function showGroupSize(api: Api, wheel: Wheel, teamCount: number): Promise<void> {
+  const total = wheel.members.length;
   const options = groupSizeOptions(total, teamCount);
-
   if (options.length === 1 && !hasCustomGroupSize(total, teamCount)) {
-    ctx.session.teamSize = options[0];
-    await showConfirm(ctx, ownerId);
+    await showConfirm(api, wheel, teamCount, options[0] ?? 1);
     return;
   }
 
-  ctx.session.step = "teamSize";
-  ctx.session.teamSize = undefined;
-  await editPanel(ctx, `${teamCount} groups. How many members per group?`, groupSizeKeyboard(ownerId, total, teamCount));
+  await moveWheel(wheel.id, OPEN_STEPS, { step: "teamSize", teamCount, teamSize: null });
+  await editPanel(api, wheel, `${teamCount} groups. How many members per group?`, groupSizeKeyboard(wheel.id, total, teamCount));
 }
 
-async function startWheel(ctx: BotContext, ownerId: number, chatId: number, chatTitle: string): Promise<void> {
-  const wait = await claimWheelCooldown(chatId);
-  if (wait > 0) {
-    await closePanel(ctx, `Wait ${wait}s before spinning again.`);
-    return;
-  }
-
-  await editPanel(ctx, "Loading members...");
-
-  try {
-    const members = await fetchChatMembers(chatId);
-    if (members.length < 2) {
-      await closePanel(ctx, "Need at least 2 members to spin.");
-      return;
-    }
-    ctx.session.targetChatId = chatId;
-    ctx.session.targetTitle = chatTitle;
-    ctx.session.members = members;
-    await showGroupCount(ctx, ownerId);
-  } catch (error) {
-    if (error instanceof MembersError) {
-      await closePanel(ctx, error.message);
-      return;
-    }
-    throw error;
-  }
+async function closeWheel(api: Api, wheel: Wheel, text: string): Promise<void> {
+  await moveWheel(wheel.id, OPEN_STEPS, { step: "cancelled" });
+  await editPanel(api, wheel, text);
 }
 
-async function postResult(ctx: BotContext): Promise<void> {
-  const { members, teamCount, teamSize, targetChatId, targetTitle = "", panelChatId, panelMessageId } = ctx.session;
-  const requester = ctx.from;
-  if (teamCount === undefined || teamSize === undefined || targetChatId === undefined || !requester) {
-    await closePanel(ctx, "This wheel expired. Send /wheel again.");
+async function collectMembers(api: Api, chatId: number, owner: Member): Promise<Member[]> {
+  await syncAdmins(api, chatId);
+  const known = await listKnownMembers(chatId);
+  return known.some((member) => member.id === owner.id) ? known : [owner, ...known];
+}
+
+async function openWheel(api: Api, chatId: number, owner: Member): Promise<Wheel | null> {
+  const members = await collectMembers(api, chatId, owner);
+  const wheel = await createWheel(chatId, owner, members);
+  const panel = await api
+    .sendMessage(chatId, joinText(wheel), { parse_mode: "HTML", reply_markup: joinKeyboard(wheel.id) })
+    .catch(() => null);
+  if (!panel) {
+    await moveWheel(wheel.id, OPEN_STEPS, { step: "cancelled" });
+    return null;
+  }
+  await setWheelMessage(wheel.id, panel.message_id);
+  return { ...wheel, messageId: panel.message_id };
+}
+
+async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
+  const { teamCount, teamSize } = wheel;
+  if (teamCount === null || teamSize === null || !isValidConfig(wheel.members.length, teamCount, teamSize)) {
+    await closeWheel(ctx.api, wheel, ENDED_MESSAGE);
+    return;
+  }
+  if (!(await moveWheel(wheel.id, ["confirm"], { step: "done" }))) {
     return;
   }
 
-  const result = splitIntoTeams(members, teamCount, teamSize);
-  await editPanel(ctx, "Spinning...");
+  const chat = await prisma.chat.findUnique({ where: { id: BigInt(wheel.chatId) }, select: { title: true } });
+  const title = chat?.title ?? "";
+  const result = splitIntoTeams(wheel.members, teamCount, teamSize);
+  await editPanel(ctx.api, wheel, "Spinning...");
 
   await prisma.spin.create({
     data: {
-      chatId: BigInt(targetChatId),
-      requestedById: BigInt(requester.id),
+      chatId: BigInt(wheel.chatId),
+      requestedById: BigInt(wheel.ownerId),
       teamCount,
       teamSize,
       teams: result.teams.map((team) => team.map(({ id, name, username }) => ({ id, name, username }))),
@@ -148,33 +156,64 @@ async function postResult(ctx: BotContext): Promise<void> {
   });
 
   try {
-    for (const chunk of formatResult(result, targetTitle)) {
-      await ctx.api.sendMessage(targetChatId, chunk, { parse_mode: "HTML" });
+    for (const chunk of formatResult(result, title)) {
+      await ctx.api.sendMessage(wheel.chatId, chunk, { parse_mode: "HTML" });
     }
   } catch (error) {
     const reason = error instanceof GrammyError ? error.description : "unknown error";
-    await closePanel(ctx, `Couldn't post the result: ${escapeHtml(reason)}`);
+    await editPanel(ctx.api, wheel, `Couldn't post the result: ${escapeHtml(reason)}`);
     return;
   }
 
-  const image = await renderResultImage(result, targetTitle).catch(() => null);
+  const image = await renderResultImage(result, title).catch(() => null);
   if (image) {
     await ctx.api
-      .sendPhoto(targetChatId, new InputFile(image, "wheel.png"), { caption: "Spin Wheel Result" })
+      .sendPhoto(wheel.chatId, new InputFile(image, "wheel.png"), { caption: "Spin Wheel Result" })
       .catch(() => undefined);
   }
 
-  if (panelChatId === targetChatId && panelMessageId !== undefined) {
-    await ctx.api.deleteMessage(panelChatId, panelMessageId).catch(() => undefined);
-    ctx.session = idleSession();
-    return;
+  if (wheel.messageId !== null) {
+    await ctx.api.deleteMessage(wheel.chatId, wheel.messageId).catch(() => undefined);
   }
-  await closePanel(ctx, `Result posted to <b>${escapeHtml(targetTitle)}</b>.`);
 }
 
-async function findSharedChats(ctx: BotContext, userId: number): Promise<{ id: number; title: string }[]> {
+async function askCustomNumber(ctx: Context, wheel: Wheel, prompt: string): Promise<boolean> {
+  const chat = await ctx.api.getChat(wheel.chatId).catch(() => null);
+  if (chat?.type === "channel") {
+    const sent = await ctx.api.sendMessage(wheel.ownerId, `Send the number here: ${prompt}`).catch(() => null);
+    return sent !== null;
+  }
+  const mention = `<a href="tg://user?id=${wheel.ownerId}">${escapeHtml(wheel.ownerName)}</a>`;
+  const sent = await ctx.api
+    .sendMessage(wheel.chatId, `${mention}, ${prompt}`, {
+      parse_mode: "HTML",
+      reply_markup: { force_reply: true, selective: true },
+    })
+    .catch(() => null);
+  return sent !== null;
+}
+
+async function startCustomInput(
+  ctx: Context,
+  wheel: Wheel,
+  steps: { from: "teamCount" | "teamSize"; to: "customTeamCount" | "customTeamSize" },
+  prompt: string,
+): Promise<void> {
+  if (!(await moveWheel(wheel.id, [steps.from, steps.to], { step: steps.to }))) {
+    await ctx.answerCallbackQuery();
+    return;
+  }
+  if (await askCustomNumber(ctx, wheel, prompt)) {
+    await ctx.answerCallbackQuery();
+    return;
+  }
+  await moveWheel(wheel.id, [steps.to], { step: steps.from });
+  await ctx.answerCallbackQuery({ text: "Open a private chat with me first, then try again.", show_alert: true });
+}
+
+async function findSharedChats(api: Api, userId: number): Promise<{ id: number; title: string }[]> {
   const chats = await listActiveChats(PICK_CHAT_LIMIT);
-  const checks = await Promise.allSettled(chats.map((chat) => ctx.api.getChatMember(chat.id, userId)));
+  const checks = await Promise.allSettled(chats.map((chat) => api.getChatMember(chat.id, userId)));
   return chats.filter((_, index) => {
     const check = checks[index];
     return check?.status === "fulfilled" && !["left", "kicked"].includes(check.value.status);
@@ -188,19 +227,12 @@ spinHandler.command("wheel", async (ctx) => {
   }
 
   if (ctx.chat.type === "private") {
-    const chats = await findSharedChats(ctx, user.id);
+    const chats = await findSharedChats(ctx.api, user.id);
     if (chats.length === 0) {
       await ctx.reply("Couldn't find a group or channel. Please try again.");
       return;
     }
-    const panel = await ctx.reply("Which chat should I spin?", { reply_markup: pickChatKeyboard(user.id, chats) });
-    ctx.session = {
-      ...idleSession(),
-      step: "pickChat",
-      allowedChatIds: chats.map((chat) => chat.id),
-      panelChatId: panel.chat.id,
-      panelMessageId: panel.message_id,
-    };
+    await ctx.reply("Which chat should I spin?", { reply_markup: pickChatKeyboard(chats) });
     return;
   }
 
@@ -209,145 +241,204 @@ spinHandler.command("wheel", async (ctx) => {
   }
 
   await saveChat(ctx.chat);
-  const panel = await ctx.reply("Starting the wheel...");
-  ctx.session = { ...idleSession(), panelChatId: panel.chat.id, panelMessageId: panel.message_id };
-  await startWheel(ctx, user.id, ctx.chat.id, ctx.chat.title);
+  const wait = await claimWheelCooldown(ctx.chat.id);
+  if (wait > 0) {
+    await ctx.reply(`Wait ${wait}s before spinning again.`);
+    return;
+  }
+
+  const wheel = await openWheel(ctx.api, ctx.chat.id, toMember(user));
+  if (!wheel) {
+    await ctx.reply("Couldn't start the wheel. Please try again.");
+  }
 });
 
-async function handleAction(ctx: BotContext, callback: WheelCallback): Promise<void> {
-  const { ownerId, action, value } = callback;
-  const { step, members, teamCount } = ctx.session;
-
-  switch (action) {
-    case "pk": {
-      if (step !== "pickChat" || value === undefined || !ctx.session.allowedChatIds?.includes(value)) {
-        return;
-      }
-      const member = await ctx.api.getChatMember(value, ownerId).catch(() => null);
-      if (!member || member.status === "left" || member.status === "kicked") {
-        await closePanel(ctx, "You are not a member of that chat.");
-        return;
-      }
-      const chat = await ctx.api.getChat(value).catch(() => null);
-      if (!chat || !isGroupChat(chat)) {
-        await closePanel(ctx, "Couldn't open that chat. Please try again.");
-        return;
-      }
-      await startWheel(ctx, ownerId, chat.id, chat.title);
-      return;
-    }
-    case "tc": {
-      if (!isCountStep(step) || value === undefined || value < 2 || value > members.length) {
-        return;
-      }
-      ctx.session.teamCount = value;
-      await showGroupSize(ctx, ownerId);
-      return;
-    }
-    case "ts": {
-      if (!isSizeStep(step) || value === undefined || !isValidConfig(members.length, teamCount ?? 0, value)) {
-        return;
-      }
-      ctx.session.teamSize = value;
-      await showConfirm(ctx, ownerId);
-      return;
-    }
-    case "cc": {
-      if (!isCountStep(step)) {
-        return;
-      }
-      ctx.session.step = "customTeamCount";
-      await ctx.reply(`Reply with the number of groups (2-${members.length}).`, {
-        reply_markup: { force_reply: true, selective: true },
-      });
-      return;
-    }
-    case "cs": {
-      if (!isSizeStep(step) || teamCount === undefined) {
-        return;
-      }
-      ctx.session.step = "customTeamSize";
-      await ctx.reply(`Reply with the number of members per group (1-${maxGroupSize(members.length, teamCount)}).`, {
-        reply_markup: { force_reply: true, selective: true },
-      });
-      return;
-    }
-    case "back": {
-      const sizeWasAsked =
-        teamCount !== undefined && groupSizeOptions(members.length, teamCount).length > 1;
-      if (step === "confirm" && sizeWasAsked) {
-        await showGroupSize(ctx, ownerId);
-      } else if (step === "confirm" || isSizeStep(step)) {
-        await showGroupCount(ctx, ownerId);
-      }
-      return;
-    }
-    case "x": {
-      await closePanel(ctx, "Wheel cancelled.");
-      return;
-    }
-    case "go": {
-      if (step === "confirm") {
-        await postResult(ctx);
-      }
-      return;
-    }
-  }
-}
-
-spinHandler.callbackQuery(/^w:/, async (ctx) => {
-  const callback = decodeCallback(ctx.callbackQuery.data);
-  if (!callback) {
-    await ctx.answerCallbackQuery();
+spinHandler.callbackQuery(/^p:/, async (ctx) => {
+  const chatId = decodePickChat(ctx.callbackQuery.data);
+  const member = chatId === null ? null : await ctx.api.getChatMember(chatId, ctx.from.id).catch(() => null);
+  const chat = chatId === null ? null : await ctx.api.getChat(chatId).catch(() => null);
+  if (!member || member.status === "left" || member.status === "kicked" || !chat || !isGroupChat(chat)) {
+    await ctx.answerCallbackQuery({ text: "Couldn't open that chat. Please try again.", show_alert: true });
     return;
   }
 
-  if (ctx.from.id !== callback.ownerId) {
-    await ctx.answerCallbackQuery({
-      text: "This wheel belongs to someone else. Send /wheel to start your own.",
-      show_alert: true,
-    });
-    return;
-  }
-
-  if (ctx.session.panelMessageId !== ctx.callbackQuery.message?.message_id) {
-    await ctx.answerCallbackQuery({ text: "This wheel expired. Send /wheel again.", show_alert: true });
+  const wait = await claimWheelCooldown(chat.id);
+  if (wait > 0) {
+    await ctx.answerCallbackQuery({ text: `Wait ${wait}s before spinning again.`, show_alert: true });
     return;
   }
 
   await ctx.answerCallbackQuery();
-  await handleAction(ctx, callback);
+  const wheel = await openWheel(ctx.api, chat.id, toMember(ctx.from));
+  await ctx.editMessageText(
+    wheel
+      ? `Wheel started in ${chat.title}. Tap Start there when everyone is in.`
+      : `Couldn't post in ${chat.title}. Make sure I can post messages there.`,
+  );
+});
+
+async function handleOwnerAction(ctx: Context, wheel: Wheel, callback: WheelCallback): Promise<void> {
+  const { action, value } = callback;
+  const total = wheel.members.length;
+
+  switch (action) {
+    case "start": {
+      if (wheel.step !== "joining") {
+        return;
+      }
+      if (total < 2) {
+        await ctx.answerCallbackQuery({ text: "Need at least 2 members to spin.", show_alert: true });
+        return;
+      }
+      await ctx.answerCallbackQuery();
+      await showGroupCount(ctx.api, wheel);
+      return;
+    }
+    case "tc": {
+      await ctx.answerCallbackQuery();
+      const countStep = wheel.step === "teamCount" || wheel.step === "customTeamCount";
+      if (countStep && value !== undefined && value >= 2 && value <= total) {
+        await showGroupSize(ctx.api, wheel, value);
+      }
+      return;
+    }
+    case "ts": {
+      await ctx.answerCallbackQuery();
+      const sizeStep = wheel.step === "teamSize" || wheel.step === "customTeamSize";
+      if (sizeStep && value !== undefined && wheel.teamCount !== null && isValidConfig(total, wheel.teamCount, value)) {
+        await showConfirm(ctx.api, wheel, wheel.teamCount, value);
+      }
+      return;
+    }
+    case "cc": {
+      await startCustomInput(
+        ctx,
+        wheel,
+        { from: "teamCount", to: "customTeamCount" },
+        `reply with the number of groups (2-${total}).`,
+      );
+      return;
+    }
+    case "cs": {
+      if (wheel.teamCount === null) {
+        await ctx.answerCallbackQuery();
+        return;
+      }
+      await startCustomInput(
+        ctx,
+        wheel,
+        { from: "teamSize", to: "customTeamSize" },
+        `reply with the number of members per group (1-${maxGroupSize(total, wheel.teamCount)}).`,
+      );
+      return;
+    }
+    case "back": {
+      await ctx.answerCallbackQuery();
+      const sizeWasAsked = wheel.teamCount !== null && groupSizeOptions(total, wheel.teamCount).length > 1;
+      if (wheel.step === "confirm" && sizeWasAsked && wheel.teamCount !== null) {
+        await showGroupSize(ctx.api, wheel, wheel.teamCount);
+      } else if (wheel.step === "teamCount" || wheel.step === "customTeamCount") {
+        await moveWheel(wheel.id, OPEN_STEPS, { step: "joining", teamCount: null, teamSize: null });
+        await showJoin(ctx.api, wheel);
+      } else {
+        await showGroupCount(ctx.api, wheel);
+      }
+      return;
+    }
+    case "x": {
+      await ctx.answerCallbackQuery();
+      await closeWheel(ctx.api, wheel, "Wheel cancelled.");
+      return;
+    }
+    case "go": {
+      await ctx.answerCallbackQuery({ text: "Spinning..." });
+      if (wheel.step === "confirm") {
+        await postResult(ctx, wheel);
+      }
+      return;
+    }
+    default:
+      await ctx.answerCallbackQuery();
+  }
+}
+
+function joinReply(action: "j" | "l", changed: boolean): string {
+  if (action === "j") {
+    return changed ? "You're in!" : "You're already in.";
+  }
+  return changed ? "You left the wheel." : "You're not in this wheel.";
+}
+
+spinHandler.callbackQuery(/^w:/, async (ctx) => {
+  const callback = decodeCallback(ctx.callbackQuery.data);
+  const wheel = callback ? await getWheel(callback.wheelId) : null;
+  const panelId = ctx.callbackQuery.message?.message_id;
+  if (!callback || !wheel || !OPEN_STEPS.includes(wheel.step) || wheel.messageId !== panelId) {
+    await ctx.answerCallbackQuery({ text: ENDED_MESSAGE, show_alert: true });
+    return;
+  }
+
+  if (callback.action === "j" || callback.action === "l") {
+    if (wheel.step !== "joining") {
+      await ctx.answerCallbackQuery({ text: "Joining is closed for this wheel.", show_alert: true });
+      return;
+    }
+    const member = toMember(ctx.from);
+    const changed =
+      callback.action === "j" ? await addWheelMember(wheel.id, member) : await removeWheelMember(wheel.id, ctx.from.id);
+    if (callback.action === "j") {
+      await rememberMembers(wheel.chatId, [ctx.from]).catch(() => undefined);
+    }
+    await ctx.answerCallbackQuery({ text: joinReply(callback.action, changed) });
+    if (changed) {
+      const updated = await getWheel(wheel.id);
+      if (updated) {
+        await showJoin(ctx.api, updated);
+      }
+    }
+    return;
+  }
+
+  if (ctx.from.id !== wheel.ownerId) {
+    await ctx.answerCallbackQuery({ text: `Only ${wheel.ownerName} can do this.`, show_alert: true });
+    return;
+  }
+
+  await handleOwnerAction(ctx, wheel, callback);
 });
 
 spinHandler.on("message:text", async (ctx, next) => {
-  const { step, members, teamCount } = ctx.session;
-  if (step !== "customTeamCount" && step !== "customTeamSize") {
+  const isPrivate = ctx.chat.type === "private";
+  const repliesToBot = ctx.message.reply_to_message?.from?.id === ctx.me.id;
+  if (!isPrivate && !repliesToBot) {
     await next();
     return;
   }
 
-  const value = Number(ctx.message.text.trim());
-  const ownerId = ctx.from.id;
-
-  if (step === "customTeamCount") {
-    if (!Number.isInteger(value) || value < 2 || value > members.length) {
-      await ctx.reply(`Send a number between 2 and ${members.length}.`, {
-        reply_markup: { force_reply: true, selective: true },
-      });
-      return;
-    }
-    ctx.session.teamCount = value;
-    await showGroupSize(ctx, ownerId);
+  const wheel = await findWheelAwaitingInput(ctx.from.id, isPrivate ? null : ctx.chat.id);
+  if (!wheel) {
+    await next();
     return;
   }
 
-  const max = maxGroupSize(members.length, teamCount ?? members.length);
-  if (!isValidConfig(members.length, teamCount ?? 0, value)) {
-    await ctx.reply(`Send a number between 1 and ${max}.`, {
+  const total = wheel.members.length;
+  const value = Number(ctx.message.text.trim());
+
+  if (wheel.step === "customTeamCount") {
+    if (!Number.isInteger(value) || value < 2 || value > total) {
+      await ctx.reply(`Send a number between 2 and ${total}.`, { reply_markup: { force_reply: true, selective: true } });
+      return;
+    }
+    await showGroupSize(ctx.api, wheel, value);
+    return;
+  }
+
+  const teamCount = wheel.teamCount ?? total;
+  if (!isValidConfig(total, teamCount, value)) {
+    await ctx.reply(`Send a number between 1 and ${maxGroupSize(total, teamCount)}.`, {
       reply_markup: { force_reply: true, selective: true },
     });
     return;
   }
-  ctx.session.teamSize = value;
-  await showConfirm(ctx, ownerId);
+  await showConfirm(ctx.api, wheel, teamCount, value);
 });

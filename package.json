@@ -6,7 +6,6 @@
     "dev": "tsx watch src/dev.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
-    "userbot:login": "tsx scripts/userbot-login.ts",
     "webhook:set": "tsx scripts/set-webhook.ts",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
@@ -17,11 +16,9 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "@grammyjs/storage-prisma": "^2.6.0",
     "@prisma/client": "^6.19.3",
     "@vercel/og": "^0.8.5",
-    "grammy": "^1.46.0",
-    "telegram": "^2.26.22"
+    "grammy": "^1.46.0"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
@@ -31,5 +28,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "prisma": {
+    "schema": "prisma/schema"
   }
 }

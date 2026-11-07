@@ -1,0 +1,13 @@
+model Spin {
+  id            Int      @id @default(autoincrement())
+  chatId        BigInt
+  requestedById BigInt
+  teamCount     Int
+  teamSize      Int
+  teams         Json
+  leftovers     Json
+  createdAt     DateTime @default(now())
+  chat          Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+}

@@ -1,0 +1,28 @@
+model Wheel {
+  id        Int           @id @default(autoincrement())
+  chatId    BigInt
+  messageId Int?
+  ownerId   BigInt
+  ownerName String
+  step      String
+  teamCount Int?
+  teamSize  Int?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  chat      Chat          @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  members   WheelMember[]
+
+  @@index([chatId])
+  @@index([ownerId, step])
+}
+
+model WheelMember {
+  wheelId  Int
+  userId   BigInt
+  name     String
+  username String?
+  joinedAt DateTime @default(now())
+  wheel    Wheel    @relation(fields: [wheelId], references: [id], onDelete: Cascade)
+
+  @@id([wheelId, userId])
+}
