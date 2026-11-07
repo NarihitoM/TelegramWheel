@@ -27,6 +27,7 @@ Bot:  posts the result as text and as an image
 - Anyone in the chat can start a wheel. Each chat has a 10 second cooldown between wheels.
 - Only the person who started a wheel can press its buttons.
 - Members left over after the split are listed as "Not picked".
+- `/start` explains how to use the bot.
 - `/credit` shows who made the bot.
 
 ### Why a userbot is needed
@@ -129,6 +130,7 @@ src/dev.ts                      Local long polling runner
 src/modules/chat/               Tracks chats the bot is added to, cooldown
 src/modules/spin/               /wheel flow, keyboards, split logic, text and image output
 src/modules/members/            Reads chat members with the helper account
+src/modules/start/              /start and /help command, also sent when the bot joins a chat
 src/modules/credit/             /credit command
 src/shared/                     Env config, Prisma client, userbot client, context types
 scripts/                        Userbot login and webhook setup
