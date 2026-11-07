@@ -1,4 +1,4 @@
-import { Api } from "grammy";
+import { Api, GrammyError } from "grammy";
 import { BOT_COMMANDS } from "../src/bot.js";
 import { env } from "../src/shared/config/env.js";
 
@@ -7,12 +7,20 @@ process.loadEnvFile();
 const api = new Api(env.botToken);
 const url = `${env.webhookUrl.replace(/\/$/, "")}/api/webhook`;
 
-await api.setWebhook(url, {
-  secret_token: env.webhookSecret,
-  allowed_updates: ["message", "callback_query", "my_chat_member"],
-  drop_pending_updates: true,
-});
-await api.setMyCommands(BOT_COMMANDS);
+try {
+  await api.setWebhook(url, {
+    secret_token: env.webhookSecret,
+    allowed_updates: ["message", "callback_query", "my_chat_member"],
+    drop_pending_updates: true,
+  });
+  await api.setMyCommands(BOT_COMMANDS);
+} catch (error) {
+  if (error instanceof GrammyError) {
+    console.error(`Telegram rejected the request: ${error.description}`);
+    process.exit(1);
+  }
+  throw error;
+}
 
 const info = await api.getWebhookInfo();
 console.log(`Webhook set to ${info.url}`);
