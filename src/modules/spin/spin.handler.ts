@@ -208,7 +208,7 @@ async function startCustomInput(
     return;
   }
   await moveWheel(wheel.id, [steps.to], { step: steps.from });
-  await ctx.answerCallbackQuery({ text: "Open a private chat with me first, then try again.", show_alert: true });
+  await ctx.answerCallbackQuery({ text: "Start a private chat with the bot first, then try again.", show_alert: true });
 }
 
 async function findSharedChats(api: Api, userId: number): Promise<{ id: number; title: string }[]> {
@@ -232,7 +232,7 @@ spinHandler.command("wheel", async (ctx) => {
       await ctx.reply("Couldn't find a group or channel. Please try again.");
       return;
     }
-    await ctx.reply("Which chat should I spin?", { reply_markup: pickChatKeyboard(chats) });
+    await ctx.reply("Choose a chat to spin.", { reply_markup: pickChatKeyboard(chats) });
     return;
   }
 
@@ -273,7 +273,7 @@ spinHandler.callbackQuery(/^p:/, async (ctx) => {
   await ctx.editMessageText(
     wheel
       ? `Wheel started in ${chat.title}. Tap Start there when everyone is in.`
-      : `Couldn't post in ${chat.title}. Make sure I can post messages there.`,
+      : `Couldn't post in ${chat.title}. Make sure the bot can post messages there.`,
   );
 });
 
