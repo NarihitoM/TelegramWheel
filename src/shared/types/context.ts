@@ -5,6 +5,7 @@ export type WheelStep = "idle" | "pickChat" | "teamCount" | "teamSize" | "custom
 
 export interface WheelSession {
   step: WheelStep;
+  allowedChatIds?: number[];
   targetChatId?: number;
   targetTitle?: string;
   panelChatId?: number;

@@ -194,7 +194,13 @@ spinHandler.command("wheel", async (ctx) => {
       return;
     }
     const panel = await ctx.reply("Which chat should I spin?", { reply_markup: pickChatKeyboard(user.id, chats) });
-    ctx.session = { ...idleSession(), step: "pickChat", panelChatId: panel.chat.id, panelMessageId: panel.message_id };
+    ctx.session = {
+      ...idleSession(),
+      step: "pickChat",
+      allowedChatIds: chats.map((chat) => chat.id),
+      panelChatId: panel.chat.id,
+      panelMessageId: panel.message_id,
+    };
     return;
   }
 
@@ -214,7 +220,12 @@ async function handleAction(ctx: BotContext, callback: WheelCallback): Promise<v
 
   switch (action) {
     case "pk": {
-      if (step !== "pickChat" || value === undefined) {
+      if (step !== "pickChat" || value === undefined || !ctx.session.allowedChatIds?.includes(value)) {
+        return;
+      }
+      const member = await ctx.api.getChatMember(value, ownerId).catch(() => null);
+      if (!member || member.status === "left" || member.status === "kicked") {
+        await closePanel(ctx, "You are not a member of that chat.");
         return;
       }
       const chat = await ctx.api.getChat(value).catch(() => null);
