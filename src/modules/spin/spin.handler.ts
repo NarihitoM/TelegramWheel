@@ -840,7 +840,7 @@ function manageText(mode: ManageMode, list: Member[], page: number, managers: st
       "<b>Add members</b>",
       `Tap a name to add that person to the wheel. Only ${owner} can add.`,
       "",
-      list.length > 0 ? `Not in the wheel: ${list.length}${pageInfo}` : "Everyone the bot knows in this chat is already in the wheel.",
+      list.length > 0 ? `Not in the wheel: ${list.length}${pageInfo}` : "No one to add. Everyone in this chat is already in the wheel.",
     ].join("\n");
   }
   return [
