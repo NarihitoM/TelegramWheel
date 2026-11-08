@@ -12,8 +12,8 @@ A Telegram bot for random picks in groups and channels. Anyone in the chat sends
 
 - **Split into groups**: members join with a button, the starter picks the number of groups and members per group, and the bot posts the result as text and as an image.
 - **Pick a winner**: members join with a button, the starter picks how many winners, and the bot posts the winners.
-- **Coin flip**: heads or tails, shown right away.
-- **Dice**: Telegram's animated dice.
+- **Coin flip**: a short spinning coin animation, then heads or tails.
+- **Dice**: Telegram's animated dice, followed by a message with the number.
 
 Built with Node.js, TypeScript, [grammY](https://grammy.dev), Prisma (Postgres) and `@vercel/og`. It runs on Vercel as a webhook and only needs a bot token and a database.
 
@@ -49,7 +49,7 @@ Bot:  posts the result as text and as an image
 ```
 
 - Pick a winner works the same way up to Start, then asks "How many winners?" (1 up to one less than the member count) and posts the winners.
-- Coin flip and Dice are one tap: the menu shows who flipped or rolled, and the result appears right away.
+- Coin flip and Dice are one tap. Coin flip edits the menu into a short spinning coin animation, then shows Heads or Tails. Dice sends Telegram's animated dice and, once it stops, replies with "Name rolled a 4."
 - Buttons only offer choices that fit the member count. When only one size fits, the bot skips that question.
 - Anyone in the chat can send `/wheel` and choose from the menu. Whoever chooses Split into groups or Pick a winner becomes the starter. Each chat has a 10 second cooldown between wheels.
 - Anyone can tap Join or Leave. Only the starter can press Start, Spin and the number buttons.

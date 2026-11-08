@@ -55,6 +55,9 @@ const MAX_LISTED_MEMBERS = 40;
 const EXIT_IDLE_MS = 60_000;
 const ALBUM_SIZE = 10;
 const DICE_EMOJI = "\u{1F3B2}";
+const DICE_ANIMATION_MS = 4_000;
+const COIN_FRAMES = ["( H )", "( | )", "( T )", "( | )", "( H )", "( | )", "( T )", "( | )"];
+const COIN_FRAME_MS = 700;
 const ENDED_MESSAGE = "This wheel has ended. Send /wheel to start a new one.";
 const MENU_TEXT = [
   "<b>Spin Wheel</b>",
@@ -482,6 +485,35 @@ spinHandler.callbackQuery(/^p:/, async (ctx) => {
   );
 });
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function animateCoin(api: Api, wheel: Wheel, name: string): Promise<void> {
+  const title = `<b>Coin flip</b> by ${name}`;
+  for (const frame of COIN_FRAMES) {
+    await editPanel(api, wheel, `${title}\n\nFlipping... <code>${frame}</code>`);
+    await delay(COIN_FRAME_MS);
+  }
+  const side = flipCoin();
+  await editPanel(api, wheel, `${title}\n\n<code>( ${side[0]} )</code>\nResult: <b>${side}</b>`);
+}
+
+async function rollDice(api: Api, wheel: Wheel, name: string): Promise<void> {
+  await editPanel(api, wheel, `<b>Dice</b> rolled by ${name}`);
+  const dice = await api.sendDice(wheel.chatId, DICE_EMOJI).catch(() => null);
+  if (!dice) {
+    return;
+  }
+  await delay(DICE_ANIMATION_MS);
+  await api
+    .sendMessage(wheel.chatId, `${name} rolled a <b>${dice.dice.value}</b>.`, {
+      parse_mode: "HTML",
+      reply_parameters: { message_id: dice.message_id, allow_sending_without_reply: true },
+    })
+    .catch(() => undefined);
+}
+
 async function handleModeAction(ctx: Context & { from: User }, wheel: Wheel, callback: WheelCallback): Promise<void> {
   const panelId = wheel.messageId;
   if (panelId === null || !(await moveWheel(wheel.id, ["mode"], { step: "done" }))) {
@@ -495,12 +527,11 @@ async function handleModeAction(ctx: Context & { from: User }, wheel: Wheel, cal
 
   switch (callback.action) {
     case "coin": {
-      await editPanel(ctx.api, wheel, `<b>Coin flip</b> by ${name}\n\nResult: <b>${flipCoin()}</b>`);
+      await animateCoin(ctx.api, wheel, name);
       return;
     }
     case "dice": {
-      await editPanel(ctx.api, wheel, `<b>Dice</b> rolled by ${name}`);
-      await ctx.api.sendDice(wheel.chatId, DICE_EMOJI).catch(() => undefined);
+      await rollDice(ctx.api, wheel, name);
       return;
     }
     default: {

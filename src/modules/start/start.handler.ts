@@ -7,7 +7,7 @@ export const START_MESSAGE = [
   "<b>How to use</b>",
   "1. Add the bot to the group or channel and make it an admin.",
   "2. Send /wheel and choose: <b>Split into groups</b>, <b>Pick a winner</b>, <b>Coin flip</b> or <b>Dice</b>.",
-  "3. Coin flip and Dice show the result right away.",
+  "3. Coin flip spins the coin and shows the result. Dice rolls an animated dice, then posts the number.",
   "4. For groups and winners, all members are added automatically. Members who want out tap <b>Leave</b>. Anyone missing taps <b>Join</b>.",
   "5. The starter taps <b>Start</b>, then picks the number of groups and members per group, or the number of winners.",
   "6. The result is posted in the chat. Group splits also come with an image.",
