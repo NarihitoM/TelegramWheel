@@ -33,7 +33,6 @@ Bot:  posts the result as text and as an image
 - Anyone in the chat can start a wheel. Each chat has a 10 second cooldown between wheels.
 - Anyone can tap Join or Leave. Only the starter can press Start, Spin and the number buttons.
 - One wheel runs per chat. Tap **Exit** to close it: the starter or an admin can exit any time, and anyone can exit after 1 minute of no activity. Wheels with no activity for 10 minutes stop blocking new ones.
-- Members left over after the split form one extra group, so nobody is left out.
 - `/start` explains how to use the bot. `/credit` shows who made it.
 
 ### Who is in the list

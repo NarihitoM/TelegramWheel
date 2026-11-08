@@ -21,8 +21,6 @@ export const BOT_DESCRIPTION = [
   "3. Pick the number of groups and members per group.",
   "4. Tap Spin to get the result as text and an image.",
   "",
-  "Leftover members go into an extra group, so nobody is left out.",
-  "",
   "Made by Narihito - github.com/NarihitoM",
 ].join("\n");
 
