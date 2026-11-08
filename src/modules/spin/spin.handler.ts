@@ -3,6 +3,7 @@ import type { User } from "grammy/types";
 import { prisma } from "../../shared/lib/prisma.js";
 import { claimWheelCooldown, isGroupChat, listActiveChannels, saveChat } from "../chat/chat.service.js";
 import { listKnownMembers, rememberMembers, scanChatMembers, syncAdmins, toMember } from "../members/members.service.js";
+import { COIN_ANIMATION_MS, sendCoinAnimation } from "./spin.coin.js";
 import { renderResultImages } from "./spin.image.js";
 import {
   confirmKeyboard,
@@ -56,8 +57,6 @@ const EXIT_IDLE_MS = 60_000;
 const ALBUM_SIZE = 10;
 const DICE_EMOJI = "\u{1F3B2}";
 const DICE_ANIMATION_MS = 4_000;
-const COIN_FRAMES = ["( H )", "( | )", "( T )", "( | )", "( H )", "( | )", "( T )", "( | )"];
-const COIN_FRAME_MS = 700;
 const ENDED_MESSAGE = "This wheel has ended. Send /wheel to start a new one.";
 const MENU_TEXT = [
   "<b>Spin Wheel</b>",
@@ -67,8 +66,6 @@ const MENU_TEXT = [
   "<b>Pick a winner</b> - pick random members",
   "<b>Coin flip</b> - heads or tails",
   "<b>Dice</b> - roll a dice",
-  "",
-  "Anyone in the chat can choose.",
 ].join("\n");
 
 export const spinHandler = new Composer<Context>();
@@ -491,12 +488,24 @@ function delay(ms: number): Promise<void> {
 
 async function animateCoin(api: Api, wheel: Wheel, name: string): Promise<void> {
   const title = `<b>Coin flip</b> by ${name}`;
-  for (const frame of COIN_FRAMES) {
-    await editPanel(api, wheel, `${title}\n\nFlipping... <code>${frame}</code>`);
-    await delay(COIN_FRAME_MS);
-  }
   const side = flipCoin();
-  await editPanel(api, wheel, `${title}\n\n<code>( ${side[0]} )</code>\nResult: <b>${side}</b>`);
+  const result = `${title}\nResult: <b>${side}</b>`;
+  const sent = await sendCoinAnimation(api, wheel.chatId, side, `${title}\nFlipping...`).catch((error: unknown) => {
+    console.error("Failed to send coin animation:", error);
+    return null;
+  });
+  if (!sent) {
+    await editPanel(api, wheel, result);
+    return;
+  }
+
+  if (wheel.messageId !== null) {
+    await api.deleteMessage(wheel.chatId, wheel.messageId).catch(() => undefined);
+  }
+  await delay(COIN_ANIMATION_MS);
+  await api
+    .editMessageCaption(wheel.chatId, sent.message_id, { caption: result, parse_mode: "HTML" })
+    .catch(() => undefined);
 }
 
 async function rollDice(api: Api, wheel: Wheel, name: string): Promise<void> {
