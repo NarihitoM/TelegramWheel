@@ -87,7 +87,7 @@ function numberKeyboard(
   return keyboard
     .row()
     .text("Back", encodeCallback({ wheelId, action: "back" }))
-    .text("Cancel", encodeCallback({ wheelId, action: "x" }));
+    .text("Exit", encodeCallback({ wheelId, action: "x" }));
 }
 
 export function joinKeyboard(wheelId: number): InlineKeyboard {
@@ -96,7 +96,7 @@ export function joinKeyboard(wheelId: number): InlineKeyboard {
     .text("Leave", encodeCallback({ wheelId, action: "l" }))
     .row()
     .text("Start", encodeCallback({ wheelId, action: "start" }))
-    .text("Cancel", encodeCallback({ wheelId, action: "x" }));
+    .text("Exit", encodeCallback({ wheelId, action: "x" }));
 }
 
 export function groupCountKeyboard(wheelId: number, memberCount: number): InlineKeyboard {
@@ -121,7 +121,7 @@ export function confirmKeyboard(wheelId: number): InlineKeyboard {
   return new InlineKeyboard()
     .text("Spin", encodeCallback({ wheelId, action: "go" }))
     .text("Back", encodeCallback({ wheelId, action: "back" }))
-    .text("Cancel", encodeCallback({ wheelId, action: "x" }));
+    .text("Exit", encodeCallback({ wheelId, action: "x" }));
 }
 
 export function pickChatKeyboard(chats: { id: number; title: string }[]): InlineKeyboard {

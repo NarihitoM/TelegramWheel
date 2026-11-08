@@ -23,8 +23,11 @@ export interface Wheel {
   step: WheelStep;
   teamCount: number | null;
   teamSize: number | null;
+  updatedAt: Date;
   members: Member[];
 }
+
+export const WHEEL_EXPIRY_MS = 10 * 60_000;
 
 const withMembers = { members: { orderBy: { joinedAt: "asc" } } } as const;
 
@@ -44,6 +47,7 @@ function toWheel(row: WheelRow): Wheel {
     step: row.step as WheelStep,
     teamCount: row.teamCount,
     teamSize: row.teamSize,
+    updatedAt: row.updatedAt,
     members: row.members.map((member) => ({
       id: member.userId.toString(),
       name: member.name,
@@ -52,9 +56,22 @@ function toWheel(row: WheelRow): Wheel {
   };
 }
 
+export async function findOpenWheel(chatId: number): Promise<Wheel | null> {
+  const row = await prisma.wheel.findFirst({
+    where: {
+      chatId: BigInt(chatId),
+      step: { in: OPEN_STEPS },
+      updatedAt: { gt: new Date(Date.now() - WHEEL_EXPIRY_MS) },
+    },
+    orderBy: { updatedAt: "desc" },
+    include: withMembers,
+  });
+  return row ? toWheel(row) : null;
+}
+
 export async function createWheel(chatId: number, owner: Member, members: Member[]): Promise<Wheel> {
   await prisma.wheel.updateMany({
-    where: { chatId: BigInt(chatId), ownerId: BigInt(owner.id), step: { in: OPEN_STEPS } },
+    where: { chatId: BigInt(chatId), step: { in: OPEN_STEPS } },
     data: { step: "cancelled" },
   });
 
@@ -87,16 +104,26 @@ export async function setWheelMessage(id: number, messageId: number): Promise<vo
   await prisma.wheel.update({ where: { id }, data: { messageId } });
 }
 
+async function touchWheel(wheelId: number): Promise<void> {
+  await prisma.wheel.update({ where: { id: wheelId }, data: { updatedAt: new Date() } });
+}
+
 export async function addWheelMember(wheelId: number, member: Member): Promise<boolean> {
   const { count } = await prisma.wheelMember.createMany({
     data: [{ wheelId, userId: BigInt(member.id), name: member.name, username: member.username }],
     skipDuplicates: true,
   });
+  if (count > 0) {
+    await touchWheel(wheelId);
+  }
   return count > 0;
 }
 
 export async function removeWheelMember(wheelId: number, userId: number): Promise<boolean> {
   const { count } = await prisma.wheelMember.deleteMany({ where: { wheelId, userId: BigInt(userId) } });
+  if (count > 0) {
+    await touchWheel(wheelId);
+  }
   return count > 0;
 }
 

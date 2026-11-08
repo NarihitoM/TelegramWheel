@@ -14,7 +14,7 @@ Bot:  Spin Wheel by Narihito
       Not in the list? Tap Join. Want out? Tap Leave.
       Members (5): ...
       [Join] [Leave]
-      [Start] [Cancel]
+      [Start] [Exit]
 Others tap Join...
 User: taps [Start]
 Bot:  6 members are in. How many groups?
@@ -24,7 +24,7 @@ Bot:  2 groups. How many members per group?
       [1] [2] [3]
 User: taps [3]
 Bot:  2 groups, each with 3 members. 6 members in total. Do you want to start spinning?
-      [Spin] [Back] [Cancel]
+      [Spin] [Back] [Exit]
 User: taps [Spin]
 Bot:  posts the result as text and as an image
 ```
@@ -32,6 +32,7 @@ Bot:  posts the result as text and as an image
 - Buttons only offer choices that fit the member count. When only one size fits, the bot skips that question.
 - Anyone in the chat can start a wheel. Each chat has a 10 second cooldown between wheels.
 - Anyone can tap Join or Leave. Only the starter can press Start, Spin and the number buttons.
+- One wheel runs per chat. Tap **Exit** to close it: the starter or an admin can exit any time, and anyone can exit after 1 minute of no activity. Wheels with no activity for 10 minutes stop blocking new ones.
 - Members left over after the split form one extra group, so nobody is left out.
 - `/start` explains how to use the bot. `/credit` shows who made it.
 

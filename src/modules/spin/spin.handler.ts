@@ -1,4 +1,5 @@
 import { Composer, GrammyError, InputFile, type Api, type Context, type InlineKeyboard } from "grammy";
+import type { User } from "grammy/types";
 import { prisma } from "../../shared/lib/prisma.js";
 import { claimWheelCooldown, isGroupChat, listActiveChats, saveChat } from "../chat/chat.service.js";
 import { listKnownMembers, rememberMembers, scanChatMembers, syncAdmins, toMember } from "../members/members.service.js";
@@ -22,6 +23,7 @@ import type { Member } from "./spin.types.js";
 import {
   addWheelMember,
   createWheel,
+  findOpenWheel,
   findWheelAwaitingInput,
   getWheel,
   moveWheel,
@@ -33,6 +35,7 @@ import {
 
 const PICK_CHAT_LIMIT = 30;
 const MAX_LISTED_MEMBERS = 40;
+const EXIT_IDLE_MS = 60_000;
 const ENDED_MESSAGE = "This wheel has ended. Send /wheel to start a new one.";
 
 export const spinHandler = new Composer<Context>();
@@ -231,6 +234,39 @@ async function findSharedChats(api: Api, userId: number): Promise<{ id: number; 
   });
 }
 
+async function checkOpenWheel(api: Api, chatId: number, userId: number): Promise<string | null> {
+  const open = await findOpenWheel(chatId);
+  if (!open) {
+    return null;
+  }
+  if (open.ownerId === userId) {
+    await closeWheel(api, open, "Wheel closed. A new one was started.");
+    return null;
+  }
+  return `${open.ownerName}'s wheel is still open. Tap Exit on it first, then send /wheel again.`;
+}
+
+async function isChatAdmin(api: Api, chatId: number, userId: number): Promise<boolean> {
+  const member = await api.getChatMember(chatId, userId).catch(() => null);
+  return member?.status === "creator" || member?.status === "administrator";
+}
+
+async function exitWheel(ctx: Context & { from: User }, wheel: Wheel): Promise<void> {
+  const idle = Date.now() - wheel.updatedAt.getTime() >= EXIT_IDLE_MS;
+  const allowed = ctx.from.id === wheel.ownerId || idle || (await isChatAdmin(ctx.api, wheel.chatId, ctx.from.id));
+  if (!allowed) {
+    await ctx.answerCallbackQuery({
+      text: `Only ${wheel.ownerName} or an admin can exit now. Anyone can exit after 1 minute of no activity.`,
+      show_alert: true,
+    });
+    return;
+  }
+
+  await ctx.answerCallbackQuery();
+  const closer = toMember(ctx.from).name;
+  await closeWheel(ctx.api, wheel, `Wheel closed by ${escapeHtml(closer)}. Send /wheel to start a new one.`);
+}
+
 spinHandler.command("wheel", async (ctx) => {
   const user = ctx.from;
   if (!user) {
@@ -252,6 +288,12 @@ spinHandler.command("wheel", async (ctx) => {
   }
 
   await saveChat(ctx.chat);
+  const blocked = await checkOpenWheel(ctx.api, ctx.chat.id, user.id);
+  if (blocked) {
+    await ctx.reply(blocked);
+    return;
+  }
+
   const wait = await claimWheelCooldown(ctx.chat.id);
   if (wait > 0) {
     await ctx.reply(`Wait ${wait}s before spinning again.`);
@@ -270,6 +312,12 @@ spinHandler.callbackQuery(/^p:/, async (ctx) => {
   const chat = chatId === null ? null : await ctx.api.getChat(chatId).catch(() => null);
   if (!member || member.status === "left" || member.status === "kicked" || !chat || !isGroupChat(chat)) {
     await ctx.answerCallbackQuery({ text: "Couldn't open that chat. Please try again.", show_alert: true });
+    return;
+  }
+
+  const blocked = await checkOpenWheel(ctx.api, chat.id, ctx.from.id);
+  if (blocked) {
+    await ctx.answerCallbackQuery({ text: blocked, show_alert: true });
     return;
   }
 
@@ -356,11 +404,6 @@ async function handleOwnerAction(ctx: Context, wheel: Wheel, callback: WheelCall
       }
       return;
     }
-    case "x": {
-      await ctx.answerCallbackQuery();
-      await closeWheel(ctx.api, wheel, "Wheel cancelled.");
-      return;
-    }
     case "go": {
       await ctx.answerCallbackQuery({ text: "Spinning..." });
       if (wheel.step === "confirm") {
@@ -407,6 +450,11 @@ spinHandler.callbackQuery(/^w:/, async (ctx) => {
         await showJoin(ctx.api, updated);
       }
     }
+    return;
+  }
+
+  if (callback.action === "x") {
+    await exitWheel(ctx, wheel);
     return;
   }
 

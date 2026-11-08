@@ -17,6 +17,8 @@ export const START_MESSAGE = [
   "<b>Good to know</b>",
   "- Anyone in the chat can start a wheel.",
   "- Only the starter can press Start, Spin and the number buttons.",
+  "- One wheel runs per chat. Tap <b>Exit</b> to close it so someone else can start.",
+  "- The starter or an admin can exit any time. Anyone can exit after 1 minute of no activity.",
   "- Wait 10 seconds between wheels in the same chat.",
   "- Members who don't fit go into one extra group, so nobody is left out.",
   "",
