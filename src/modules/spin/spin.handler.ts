@@ -4,7 +4,7 @@ import { prisma } from "../../shared/lib/prisma.js";
 import { claimWheelCooldown, isGroupChat, listActiveChannels, saveChat } from "../chat/chat.service.js";
 import { listKnownMembers, loadChatMembers, rememberMembers, syncAdmins, toMember } from "../members/members.service.js";
 import { COIN_ANIMATION_MS, sendCoinSticker, showLoading, type AnimationName } from "./spin.animation.js";
-import { getStoredAvatars, syncAvatars, type AvatarMap } from "../members/avatar.service.js";
+import { getStoredAvatars, syncChatAvatars, syncMissingAvatars, type AvatarMap } from "../members/avatar.service.js";
 import { renderResultImages, renderWinnersImage } from "./spin.image.js";
 import {
   confirmKeyboard,
@@ -212,9 +212,8 @@ async function openWheel(api: Api, menu: Wheel, owner: Member, mode: WheelMode):
   }
   const loading = await startLoading(api, menu, "loading", `${MENU_TEXT}\n\n<b>Fetching members list...</b>`);
 
-  let members: Member[];
   try {
-    members = await collectMembers(api, chatId, owner);
+    const members = await collectMembers(api, chatId, owner);
     const created = await createWheel(chatId, owner, members, { mode });
     await loading.stop();
     if (loading.panelHidden) {
@@ -234,14 +233,14 @@ async function openWheel(api: Api, menu: Wheel, owner: Member, mode: WheelMode):
     throw error;
   }
 
-  await syncAvatars(api, members.slice(0, MAX_AVATARS), PREFETCH_AVATARS_MS).catch((error: unknown) => {
+  await syncChatAvatars(chatId, PREFETCH_AVATARS_MS).catch((error: unknown) => {
     console.error("Failed to save profile photos:", error);
   });
 }
 
 async function avatarsFor(api: Api, members: Member[]): Promise<AvatarMap> {
   const shown = members.slice(0, MAX_AVATARS);
-  await syncAvatars(api, shown, RESULT_AVATARS_MS).catch(() => undefined);
+  await syncMissingAvatars(api, shown, RESULT_AVATARS_MS).catch(() => undefined);
   return getStoredAvatars(shown).catch(() => new Map());
 }
 

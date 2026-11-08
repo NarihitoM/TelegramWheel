@@ -69,7 +69,7 @@ If those two values are not set, or the scan fails, the bot falls back to member
 
 Result and winner images show each user's profile photo next to their name, so it is clear who is who. Users without a photo (or with a hidden one) get a coloured circle with their first letter.
 
-Photos are saved in the `Avatar` table so spins don't wait for downloads. They are saved when the bot is added to a group, right after `/wheel` shows the join panel, and when someone joins the group. A photo is only downloaded again when it changed, checked at most every 3 days. Up to 200 photos are used per image; anyone after that gets the letter circle.
+Photos are saved in the `Avatar` table so spins don't wait for downloads. They are downloaded through the bot's MTProto login (the same one used for the member scan), because the regular Bot API can't see users who never talked to the bot. Photos are synced when the bot is added to a group and right after `/wheel` shows the join panel; only new or changed photos are downloaded. People who join later are picked up through the Bot API. Up to 200 photos are used per image; anyone after that gets the letter circle.
 
 ### Channels
 

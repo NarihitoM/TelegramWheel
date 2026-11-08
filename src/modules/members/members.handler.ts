@@ -1,7 +1,7 @@
 import { Composer, type Context } from "grammy";
 import type { Chat, ChatMember, User } from "grammy/types";
 import { isGroupChat, saveChat } from "../chat/chat.service.js";
-import { syncAvatars } from "./avatar.service.js";
+import { syncMissingAvatars } from "./avatar.service.js";
 import { clearCachedMembers, forgetMember, rememberMembers, toMember } from "./members.service.js";
 
 const JOIN_AVATARS_MS = 5_000;
@@ -44,7 +44,7 @@ membersHandler.on("message", async (ctx, next) => {
         await clearCachedMembers(chat.id);
       }
       if (joined.length > 0) {
-        await syncAvatars(ctx.api, joined.map(toMember), JOIN_AVATARS_MS);
+        await syncMissingAvatars(ctx.api, joined.map(toMember), JOIN_AVATARS_MS);
       }
     } catch (error) {
       console.error("Failed to track members:", error);
