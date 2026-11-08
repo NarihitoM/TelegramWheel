@@ -8,7 +8,12 @@
   <a href="https://t.me/tg_spinwheel_bot">Open @tg_spinwheel_bot in Telegram</a>
 </p>
 
-A Telegram bot that splits a group's or channel's members into random groups. Anyone in the chat sends `/wheel`, members join with a button, the starter picks the number of groups and members per group, and the bot posts the result as text and as an image.
+A Telegram bot for random picks in groups and channels. Anyone in the chat sends `/wheel` and chooses a mode:
+
+- **Split into groups**: members join with a button, the starter picks the number of groups and members per group, and the bot posts the result as text and as an image.
+- **Pick a winner**: members join with a button, the starter picks how many winners, and the bot posts the winners.
+- **Coin flip**: heads or tails, shown right away.
+- **Dice**: Telegram's animated dice.
 
 Built with Node.js, TypeScript, [grammY](https://grammy.dev), Prisma (Postgres) and `@vercel/og`. It runs on Vercel as a webhook and only needs a bot token and a database.
 
@@ -18,6 +23,12 @@ Made by Narihito.
 
 ```
 User: /wheel
+Bot:  Spin Wheel
+      Choose what to do:
+      [Split into groups] [Pick a winner]
+      [Coin flip] [Dice]
+      [Exit]
+User: taps [Split into groups]
 Bot:  Spin Wheel by Narihito
       Not in the list? Tap Join. Want out? Tap Leave.
       Members (5): ...
@@ -37,8 +48,10 @@ User: taps [Spin]
 Bot:  posts the result as text and as an image
 ```
 
+- Pick a winner works the same way up to Start, then asks "How many winners?" (1 up to one less than the member count) and posts the winners.
+- Coin flip and Dice are one tap: the menu shows who flipped or rolled, and the result appears right away.
 - Buttons only offer choices that fit the member count. When only one size fits, the bot skips that question.
-- Anyone in the chat can start a wheel. Each chat has a 10 second cooldown between wheels.
+- Anyone in the chat can send `/wheel` and choose from the menu. Whoever chooses Split into groups or Pick a winner becomes the starter. Each chat has a 10 second cooldown between wheels.
 - Anyone can tap Join or Leave. Only the starter can press Start, Spin and the number buttons.
 - One wheel runs per chat. Tap **Exit** to close it: the starter or an admin can exit any time, and anyone can exit after 1 minute of no activity. Wheels with no activity for 10 minutes stop blocking new ones.
 - `/start` explains how to use the bot. `/credit` shows who made it. `/donate` shows KPay details from env variables, so phone numbers never go into the code.
@@ -51,7 +64,7 @@ If those two values are not set, or the scan fails, the bot falls back to member
 
 ### Channels
 
-Users can't send commands inside a channel. Channel admins send `/wheel` to the bot in a private chat and pick the channel. The list only shows channels where that person is an admin, so nobody sees chats they don't manage. The wheel is posted in the channel, where subscribers can tap Join. The bot needs permission to post and edit messages there.
+Users can't send commands inside a channel. Channel admins send `/wheel` to the bot in a private chat and pick the channel. The list only shows channels where that person is an admin, so nobody sees chats they don't manage. The wheel menu is posted in the channel, where subscribers can choose a mode and tap Join. The bot needs permission to post and edit messages there.
 
 ## Setup
 
@@ -130,7 +143,7 @@ src/bot.ts                      Bot setup and handlers
 src/dev.ts                      Local long polling runner
 src/modules/chat/               Tracks chats the bot is added to, cooldown
 src/modules/members/            Remembers members from messages, joins and admins
-src/modules/spin/               /wheel flow, join panel, keyboards, split logic, text and image output
+src/modules/spin/               /wheel menu, join panel, keyboards, split, winner, coin and dice logic, text and image output
 src/modules/start/              /start and /help, also sent when the bot joins a chat
 src/modules/credit/             /credit command
 src/shared/                     Env config, Prisma client, bot MTProto client

@@ -5,6 +5,7 @@ model Wheel {
   ownerId   BigInt
   ownerName String
   step      String
+  mode      String        @default("split")
   teamCount Int?
   teamSize  Int?
   createdAt DateTime      @default(now())

@@ -14,12 +14,25 @@ import {
   hasCustomGroupSize,
   joinKeyboard,
   maxGroupSize,
+  maxWinners,
+  MODE_ACTIONS,
+  modeKeyboard,
   pickChatKeyboard,
+  winnerCountKeyboard,
   type WheelCallback,
 } from "./spin.keyboard.js";
-import { describeSplit, escapeHtml, formatResult, formatSummary, MAX_TEXT_MESSAGES, toPlainText } from "./spin.message.js";
-import { isValidConfig, splitIntoTeams } from "./spin.service.js";
-import type { Member, SpinResult } from "./spin.types.js";
+import {
+  describeSplit,
+  escapeHtml,
+  formatResult,
+  formatSummary,
+  formatWinners,
+  formatWinnersSummary,
+  MAX_TEXT_MESSAGES,
+  toPlainText,
+} from "./spin.message.js";
+import { flipCoin, isValidConfig, pickWinners, splitIntoTeams } from "./spin.service.js";
+import type { Member } from "./spin.types.js";
 import {
   addWheelMember,
   createWheel,
@@ -31,6 +44,8 @@ import {
   removeWheelMember,
   setWheelMessage,
   type Wheel,
+  type WheelMode,
+  type WheelStep,
 } from "./wheel.service.js";
 
 const PICK_CHAT_LIMIT = 30;
@@ -39,7 +54,19 @@ const ADMIN_CHECK_BATCH = 10;
 const MAX_LISTED_MEMBERS = 40;
 const EXIT_IDLE_MS = 60_000;
 const ALBUM_SIZE = 10;
+const DICE_EMOJI = "\u{1F3B2}";
 const ENDED_MESSAGE = "This wheel has ended. Send /wheel to start a new one.";
+const MENU_TEXT = [
+  "<b>Spin Wheel</b>",
+  "Choose what to do:",
+  "",
+  "<b>Split into groups</b> - split members into random groups",
+  "<b>Pick a winner</b> - pick random members",
+  "<b>Coin flip</b> - heads or tails",
+  "<b>Dice</b> - roll a dice",
+  "",
+  "Anyone in the chat can choose.",
+].join("\n");
 
 export const spinHandler = new Composer<Context>();
 
@@ -60,8 +87,9 @@ function joinText(wheel: Wheel): string {
   const owner = escapeHtml(wheel.ownerName);
   const listed = wheel.members.slice(0, MAX_LISTED_MEMBERS).map((member, index) => `${index + 1}. ${escapeHtml(member.name)}`);
   const hidden = wheel.members.length - listed.length;
+  const title = wheel.mode === "winner" ? "Pick a Winner" : "Spin Wheel";
   return [
-    `<b>Spin Wheel</b> by ${owner}`,
+    `<b>${title}</b> by ${owner}`,
     "Not in the list? Tap Join. Want out? Tap Leave.",
     `${owner} taps Start when everyone is in.`,
     "",
@@ -109,6 +137,16 @@ async function showGroupSize(api: Api, wheel: Wheel, teamCount: number): Promise
   await editPanel(api, wheel, `${teamCount} groups. How many members per group?`, groupSizeKeyboard(wheel.id, total, teamCount));
 }
 
+async function showWinnerCount(api: Api, wheel: Wheel): Promise<void> {
+  await moveWheel(wheel.id, OPEN_STEPS, { step: "winnerCount", teamCount: null, teamSize: null });
+  await editPanel(
+    api,
+    wheel,
+    `${wheel.members.length} members are in. How many winners?`,
+    winnerCountKeyboard(wheel.id, wheel.members.length),
+  );
+}
+
 async function closeWheel(api: Api, wheel: Wheel, text: string): Promise<void> {
   await moveWheel(wheel.id, OPEN_STEPS, { step: "cancelled" });
   await editPanel(api, wheel, text);
@@ -123,38 +161,42 @@ async function collectMembers(api: Api, chatId: number, owner: Member): Promise<
   return members.some((member) => member.id === owner.id) ? members : [owner, ...members];
 }
 
-async function openWheel(api: Api, chatId: number, owner: Member): Promise<Wheel | null> {
-  const panel = await api.sendMessage(chatId, "Fetching members list...").catch(() => null);
-  if (!panel) {
-    return null;
+async function openMenu(api: Api, chatId: number, owner: Member): Promise<boolean> {
+  const menu = await createWheel(chatId, owner, [], { step: "mode" });
+  const sent = await api
+    .sendMessage(chatId, MENU_TEXT, { parse_mode: "HTML", reply_markup: modeKeyboard(menu.id) })
+    .catch(() => null);
+  if (!sent) {
+    await moveWheel(menu.id, ["mode"], { step: "cancelled" });
+    return false;
   }
+  await setWheelMessage(menu.id, sent.message_id);
+  return true;
+}
+
+async function openWheel(api: Api, chatId: number, panelId: number, owner: Member, mode: WheelMode): Promise<void> {
+  await api.editMessageText(chatId, panelId, "Fetching members list...").catch(() => undefined);
 
   let created: Wheel;
   try {
     const members = await collectMembers(api, chatId, owner);
-    created = await createWheel(chatId, owner, members);
-    await setWheelMessage(created.id, panel.message_id);
+    created = await createWheel(chatId, owner, members, { mode });
+    await setWheelMessage(created.id, panelId);
   } catch (error) {
-    await api
-      .editMessageText(chatId, panel.message_id, "Couldn't fetch the members list. Please try again.")
-      .catch(() => undefined);
+    await api.editMessageText(chatId, panelId, "Couldn't fetch the members list. Please try again.").catch(() => undefined);
     throw error;
   }
 
-  const wheel = { ...created, messageId: panel.message_id };
-  await showJoin(api, wheel);
-  return wheel;
+  await showJoin(api, { ...created, messageId: panelId });
 }
 
-async function postResultText(
+async function postText(
   api: Api,
   chatId: number,
-  result: SpinResult,
-  title: string,
-  teamCount: number,
-  teamSize: number,
+  chunks: string[],
+  summary: string,
+  caption: string,
 ): Promise<void> {
-  const chunks = formatResult(result, title, teamCount, teamSize);
   if (chunks.length <= MAX_TEXT_MESSAGES) {
     for (const chunk of chunks) {
       await api.sendMessage(chatId, chunk, { parse_mode: "HTML" });
@@ -162,10 +204,56 @@ async function postResultText(
     return;
   }
 
-  await api.sendMessage(chatId, formatSummary(result, title, teamCount, teamSize), { parse_mode: "HTML" });
+  await api.sendMessage(chatId, summary, { parse_mode: "HTML" });
   await api.sendDocument(chatId, new InputFile(Buffer.from(toPlainText(chunks), "utf8"), "spin-wheel-result.txt"), {
-    caption: "Spin Wheel Result - full list",
+    caption: `${caption} - full list`,
   });
+}
+
+async function chatTitle(chatId: number): Promise<string> {
+  const chat = await prisma.chat.findUnique({ where: { id: BigInt(chatId) }, select: { title: true } });
+  return chat?.title ?? "";
+}
+
+async function postWinners(api: Api, wheel: Wheel, count: number): Promise<void> {
+  const from: WheelStep[] = ["winnerCount", "customWinnerCount"];
+  if (count < 1 || count > maxWinners(wheel.members.length) || !(await moveWheel(wheel.id, from, { step: "done" }))) {
+    return;
+  }
+
+  const title = await chatTitle(wheel.chatId);
+  const winners = pickWinners(wheel.members, count);
+  await editPanel(api, wheel, "Picking...");
+
+  await prisma.spin.create({
+    data: {
+      chatId: BigInt(wheel.chatId),
+      requestedById: BigInt(wheel.ownerId),
+      teamCount: 1,
+      teamSize: count,
+      teams: [winners.map(({ id, name, username }) => ({ id, name, username }))],
+      leftovers: [],
+    },
+  });
+
+  const total = wheel.members.length;
+  try {
+    await postText(
+      api,
+      wheel.chatId,
+      formatWinners(winners, title, total),
+      formatWinnersSummary(winners, title, total),
+      count === 1 ? "Winner" : "Winners",
+    );
+  } catch (error) {
+    const reason = error instanceof GrammyError ? error.description : "unknown error";
+    await editPanel(api, wheel, `Couldn't post the result: ${escapeHtml(reason)}`);
+    return;
+  }
+
+  if (wheel.messageId !== null) {
+    await api.deleteMessage(wheel.chatId, wheel.messageId).catch(() => undefined);
+  }
 }
 
 async function postResultImages(api: Api, chatId: number, images: Buffer[]): Promise<void> {
@@ -204,8 +292,7 @@ async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
     return;
   }
 
-  const chat = await prisma.chat.findUnique({ where: { id: BigInt(wheel.chatId) }, select: { title: true } });
-  const title = chat?.title ?? "";
+  const title = await chatTitle(wheel.chatId);
   const result = splitIntoTeams(wheel.members, teamCount, teamSize);
   await editPanel(ctx.api, wheel, "Spinning...");
 
@@ -221,7 +308,13 @@ async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
   });
 
   try {
-    await postResultText(ctx.api, wheel.chatId, result, title, teamCount, teamSize);
+    await postText(
+      ctx.api,
+      wheel.chatId,
+      formatResult(result, title, teamCount, teamSize),
+      formatSummary(result, title, teamCount, teamSize),
+      "Spin Wheel Result",
+    );
   } catch (error) {
     const reason = error instanceof GrammyError ? error.description : "unknown error";
     await editPanel(ctx.api, wheel, `Couldn't post the result: ${escapeHtml(reason)}`);
@@ -260,7 +353,7 @@ async function askCustomNumber(ctx: Context, wheel: Wheel, prompt: string): Prom
 async function startCustomInput(
   ctx: Context,
   wheel: Wheel,
-  steps: { from: "teamCount" | "teamSize"; to: "customTeamCount" | "customTeamSize" },
+  steps: { from: WheelStep; to: WheelStep },
   prompt: string,
 ): Promise<void> {
   if (!(await moveWheel(wheel.id, [steps.from, steps.to], { step: steps.to }))) {
@@ -354,8 +447,7 @@ spinHandler.command("wheel", async (ctx) => {
     return;
   }
 
-  const wheel = await openWheel(ctx.api, ctx.chat.id, toMember(user));
-  if (!wheel) {
+  if (!(await openMenu(ctx.api, ctx.chat.id, toMember(user)))) {
     await ctx.reply("Couldn't start the wheel. Please try again.");
   }
 });
@@ -382,13 +474,40 @@ spinHandler.callbackQuery(/^p:/, async (ctx) => {
   }
 
   await ctx.answerCallbackQuery();
-  const wheel = await openWheel(ctx.api, chat.id, toMember(ctx.from));
+  const opened = await openMenu(ctx.api, chat.id, toMember(ctx.from));
   await ctx.editMessageText(
-    wheel
-      ? `Wheel started in ${chat.title}. Tap Start there when everyone is in.`
+    opened
+      ? `Wheel menu posted in ${chat.title}. Choose what to do there.`
       : `Couldn't post in ${chat.title}. Make sure the bot can post messages there.`,
   );
 });
+
+async function handleModeAction(ctx: Context & { from: User }, wheel: Wheel, callback: WheelCallback): Promise<void> {
+  const panelId = wheel.messageId;
+  if (panelId === null || !(await moveWheel(wheel.id, ["mode"], { step: "done" }))) {
+    await ctx.answerCallbackQuery({ text: ENDED_MESSAGE, show_alert: true });
+    return;
+  }
+
+  await ctx.answerCallbackQuery();
+  const player = toMember(ctx.from);
+  const name = escapeHtml(player.name);
+
+  switch (callback.action) {
+    case "coin": {
+      await editPanel(ctx.api, wheel, `<b>Coin flip</b> by ${name}\n\nResult: <b>${flipCoin()}</b>`);
+      return;
+    }
+    case "dice": {
+      await editPanel(ctx.api, wheel, `<b>Dice</b> rolled by ${name}`);
+      await ctx.api.sendDice(wheel.chatId, DICE_EMOJI).catch(() => undefined);
+      return;
+    }
+    default: {
+      await openWheel(ctx.api, wheel.chatId, panelId, player, callback.action === "win" ? "winner" : "split");
+    }
+  }
+}
 
 async function handleOwnerAction(ctx: Context, wheel: Wheel, callback: WheelCallback): Promise<void> {
   const { action, value } = callback;
@@ -404,7 +523,27 @@ async function handleOwnerAction(ctx: Context, wheel: Wheel, callback: WheelCall
         return;
       }
       await ctx.answerCallbackQuery();
-      await showGroupCount(ctx.api, wheel);
+      if (wheel.mode === "winner") {
+        await showWinnerCount(ctx.api, wheel);
+      } else {
+        await showGroupCount(ctx.api, wheel);
+      }
+      return;
+    }
+    case "wc": {
+      await ctx.answerCallbackQuery();
+      if (value !== undefined && (wheel.step === "winnerCount" || wheel.step === "customWinnerCount")) {
+        await postWinners(ctx.api, wheel, value);
+      }
+      return;
+    }
+    case "cw": {
+      await startCustomInput(
+        ctx,
+        wheel,
+        { from: "winnerCount", to: "customWinnerCount" },
+        `reply with the number of winners (1-${maxWinners(total)}).`,
+      );
       return;
     }
     case "tc": {
@@ -447,10 +586,15 @@ async function handleOwnerAction(ctx: Context, wheel: Wheel, callback: WheelCall
     }
     case "back": {
       await ctx.answerCallbackQuery();
+      if (wheel.step === "joining") {
+        return;
+      }
       const sizeWasAsked = wheel.teamCount !== null && groupSizeOptions(total, wheel.teamCount).length > 1;
+      const backToJoin =
+        wheel.mode === "winner" || wheel.step === "teamCount" || wheel.step === "customTeamCount";
       if (wheel.step === "confirm" && sizeWasAsked && wheel.teamCount !== null) {
         await showGroupSize(ctx.api, wheel, wheel.teamCount);
-      } else if (wheel.step === "teamCount" || wheel.step === "customTeamCount") {
+      } else if (backToJoin) {
         await moveWheel(wheel.id, OPEN_STEPS, { step: "joining", teamCount: null, teamSize: null });
         await showJoin(ctx.api, wheel);
       } else {
@@ -483,6 +627,15 @@ spinHandler.callbackQuery(/^w:/, async (ctx) => {
   const panelId = ctx.callbackQuery.message?.message_id;
   if (!callback || !wheel || !OPEN_STEPS.includes(wheel.step) || wheel.messageId !== panelId) {
     await ctx.answerCallbackQuery({ text: ENDED_MESSAGE, show_alert: true });
+    return;
+  }
+
+  if (wheel.step === "mode" && callback.action !== "x") {
+    if (MODE_ACTIONS.includes(callback.action)) {
+      await handleModeAction(ctx, wheel, callback);
+    } else {
+      await ctx.answerCallbackQuery();
+    }
     return;
   }
 
@@ -536,6 +689,17 @@ spinHandler.on("message:text", async (ctx, next) => {
 
   const total = wheel.members.length;
   const value = Number(ctx.message.text.trim());
+
+  if (wheel.step === "customWinnerCount") {
+    if (!Number.isInteger(value) || value < 1 || value > maxWinners(total)) {
+      await ctx.reply(`Send a number between 1 and ${maxWinners(total)}.`, {
+        reply_markup: { force_reply: true, selective: true },
+      });
+      return;
+    }
+    await postWinners(ctx.api, wheel, value);
+    return;
+  }
 
   if (wheel.step === "customTeamCount") {
     if (!Number.isInteger(value) || value < 2 || value > total) {

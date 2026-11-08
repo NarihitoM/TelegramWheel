@@ -3,7 +3,25 @@ import { InlineKeyboard } from "grammy";
 export const MAX_BUTTONS = 8;
 const BUTTONS_PER_ROW = 4;
 
-export type WheelAction = "j" | "l" | "start" | "tc" | "ts" | "cc" | "cs" | "go" | "back" | "x";
+export type WheelAction =
+  | "split"
+  | "win"
+  | "coin"
+  | "dice"
+  | "j"
+  | "l"
+  | "start"
+  | "tc"
+  | "ts"
+  | "cc"
+  | "cs"
+  | "wc"
+  | "cw"
+  | "go"
+  | "back"
+  | "x";
+
+export const MODE_ACTIONS: readonly WheelAction[] = ["split", "win", "coin", "dice"];
 
 export interface WheelCallback {
   wheelId: number;
@@ -11,7 +29,7 @@ export interface WheelCallback {
   value?: number;
 }
 
-const ACTIONS: readonly WheelAction[] = ["j", "l", "start", "tc", "ts", "cc", "cs", "go", "back", "x"];
+const ACTIONS: readonly WheelAction[] = [...MODE_ACTIONS, "j", "l", "start", "tc", "ts", "cc", "cs", "wc", "cw", "go", "back", "x"];
 
 export function encodeCallback({ wheelId, action, value }: WheelCallback): string {
   return value === undefined ? `w:${wheelId}:${action}` : `w:${wheelId}:${action}:${value}`;
@@ -64,6 +82,18 @@ export function hasCustomGroupSize(memberCount: number, groupCount: number): boo
   return maxGroupSize(memberCount, groupCount) > MAX_BUTTONS;
 }
 
+export function maxWinners(memberCount: number): number {
+  return memberCount - 1;
+}
+
+export function winnerCountOptions(memberCount: number): number[] {
+  return range(1, Math.min(maxWinners(memberCount), MAX_BUTTONS));
+}
+
+export function hasCustomWinnerCount(memberCount: number): boolean {
+  return maxWinners(memberCount) > MAX_BUTTONS;
+}
+
 function numberKeyboard(
   wheelId: number,
   values: number[],
@@ -87,6 +117,17 @@ function numberKeyboard(
   return keyboard
     .row()
     .text("Back", encodeCallback({ wheelId, action: "back" }))
+    .text("Exit", encodeCallback({ wheelId, action: "x" }));
+}
+
+export function modeKeyboard(wheelId: number): InlineKeyboard {
+  return new InlineKeyboard()
+    .text("Split into groups", encodeCallback({ wheelId, action: "split" }))
+    .text("Pick a winner", encodeCallback({ wheelId, action: "win" }))
+    .row()
+    .text("Coin flip", encodeCallback({ wheelId, action: "coin" }))
+    .text("Dice", encodeCallback({ wheelId, action: "dice" }))
+    .row()
     .text("Exit", encodeCallback({ wheelId, action: "x" }));
 }
 
@@ -114,6 +155,15 @@ export function groupSizeKeyboard(wheelId: number, memberCount: number, groupCou
     groupSizeOptions(memberCount, groupCount),
     "ts",
     hasCustomGroupSize(memberCount, groupCount) ? "cs" : null,
+  );
+}
+
+export function winnerCountKeyboard(wheelId: number, memberCount: number): InlineKeyboard {
+  return numberKeyboard(
+    wheelId,
+    winnerCountOptions(memberCount),
+    "wc",
+    hasCustomWinnerCount(memberCount) ? "cw" : null,
   );
 }
 

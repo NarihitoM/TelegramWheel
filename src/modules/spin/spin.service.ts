@@ -43,3 +43,16 @@ export function splitIntoTeams(
 
   return { teams };
 }
+
+export function pickWinners(members: readonly Member[], count: number, random: RandomInt = randomInt): Member[] {
+  if (!Number.isInteger(count) || count < 1 || count >= members.length) {
+    throw new Error(`Cannot pick ${count} winners from ${members.length} members`);
+  }
+  return shuffle(members, random).slice(0, count);
+}
+
+export type CoinSide = "Heads" | "Tails";
+
+export function flipCoin(random: RandomInt = randomInt): CoinSide {
+  return random(2) === 0 ? "Heads" : "Tails";
+}

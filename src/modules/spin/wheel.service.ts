@@ -1,18 +1,33 @@
 import { prisma } from "../../shared/lib/prisma.js";
 import type { Member } from "./spin.types.js";
 
+export type WheelMode = "split" | "winner";
+
 export type WheelStep =
+  | "mode"
   | "joining"
   | "teamCount"
   | "teamSize"
   | "customTeamCount"
   | "customTeamSize"
+  | "winnerCount"
+  | "customWinnerCount"
   | "confirm"
   | "done"
   | "cancelled";
 
-export const OPEN_STEPS: WheelStep[] = ["joining", "teamCount", "teamSize", "customTeamCount", "customTeamSize", "confirm"];
-export const CUSTOM_STEPS: WheelStep[] = ["customTeamCount", "customTeamSize"];
+export const OPEN_STEPS: WheelStep[] = [
+  "mode",
+  "joining",
+  "teamCount",
+  "teamSize",
+  "customTeamCount",
+  "customTeamSize",
+  "winnerCount",
+  "customWinnerCount",
+  "confirm",
+];
+export const CUSTOM_STEPS: WheelStep[] = ["customTeamCount", "customTeamSize", "customWinnerCount"];
 
 export interface Wheel {
   id: number;
@@ -21,6 +36,7 @@ export interface Wheel {
   ownerId: number;
   ownerName: string;
   step: WheelStep;
+  mode: WheelMode;
   teamCount: number | null;
   teamSize: number | null;
   updatedAt: Date;
@@ -45,6 +61,7 @@ function toWheel(row: WheelRow): Wheel {
     ownerId: Number(row.ownerId),
     ownerName: row.ownerName,
     step: row.step as WheelStep,
+    mode: row.mode === "winner" ? "winner" : "split",
     teamCount: row.teamCount,
     teamSize: row.teamSize,
     updatedAt: row.updatedAt,
@@ -69,7 +86,12 @@ export async function findOpenWheel(chatId: number): Promise<Wheel | null> {
   return row ? toWheel(row) : null;
 }
 
-export async function createWheel(chatId: number, owner: Member, members: Member[]): Promise<Wheel> {
+export async function createWheel(
+  chatId: number,
+  owner: Member,
+  members: Member[],
+  options: { mode?: WheelMode; step?: WheelStep } = {},
+): Promise<Wheel> {
   await prisma.wheel.updateMany({
     where: { chatId: BigInt(chatId), step: { in: OPEN_STEPS } },
     data: { step: "cancelled" },
@@ -81,7 +103,8 @@ export async function createWheel(chatId: number, owner: Member, members: Member
       chatId: BigInt(chatId),
       ownerId: BigInt(owner.id),
       ownerName: owner.name,
-      step: "joining",
+      step: options.step ?? "joining",
+      mode: options.mode ?? "split",
       members: {
         create: [...unique.values()].map((member) => ({
           userId: BigInt(member.id),

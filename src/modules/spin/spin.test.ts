@@ -9,11 +9,21 @@ import {
   groupSizeOptions,
   hasCustomGroupCount,
   hasCustomGroupSize,
+  hasCustomWinnerCount,
+  winnerCountOptions,
 } from "./spin.keyboard.js";
 import { toVisualOrder } from "./spin.fonts.js";
 import { buildSegments, estimateLines } from "./spin.image.js";
-import { chunkLines, describeSplit, formatResult, formatSummary, MAX_TEXT_MESSAGES, toPlainText } from "./spin.message.js";
-import { isValidConfig, shuffle, splitIntoTeams } from "./spin.service.js";
+import {
+  chunkLines,
+  describeSplit,
+  formatResult,
+  formatSummary,
+  formatWinners,
+  MAX_TEXT_MESSAGES,
+  toPlainText,
+} from "./spin.message.js";
+import { flipCoin, isValidConfig, pickWinners, shuffle, splitIntoTeams } from "./spin.service.js";
 import type { Member } from "./spin.types.js";
 
 function makeMembers(count: number): Member[] {
@@ -97,6 +107,8 @@ describe("keyboard options", () => {
     assert.deepEqual(decodeCallback(data), { wheelId: 2147483647, action: "tc", value: 8 });
     assert.deepEqual(decodeCallback("w:1:j"), { wheelId: 1, action: "j", value: undefined });
     assert.deepEqual(decodeCallback("w:1:start"), { wheelId: 1, action: "start", value: undefined });
+    assert.deepEqual(decodeCallback("w:1:coin"), { wheelId: 1, action: "coin", value: undefined });
+    assert.deepEqual(decodeCallback("w:1:wc:3"), { wheelId: 1, action: "wc", value: 3 });
     assert.equal(decodeCallback("w:1:nope"), null);
     assert.equal(decodeCallback("x:1:go"), null);
   });
@@ -105,6 +117,42 @@ describe("keyboard options", () => {
     assert.equal(decodePickChat(encodePickChat(-1001234567890)), -1001234567890);
     assert.equal(decodePickChat("p:abc"), null);
     assert.equal(decodePickChat("w:1:go"), null);
+  });
+});
+
+describe("pick a winner", () => {
+  it("picks distinct winners from the members", () => {
+    const winners = pickWinners(makeMembers(10), 3);
+    assert.equal(winners.length, 3);
+    assert.equal(new Set(winners.map((member) => member.id)).size, 3);
+  });
+
+  it("rejects winner counts that do not fit", () => {
+    assert.throws(() => pickWinners(makeMembers(5), 0));
+    assert.throws(() => pickWinners(makeMembers(5), 5));
+  });
+
+  it("offers winner counts below the member count", () => {
+    assert.deepEqual(winnerCountOptions(2), [1]);
+    assert.deepEqual(winnerCountOptions(4), [1, 2, 3]);
+    assert.deepEqual(winnerCountOptions(50), [1, 2, 3, 4, 5, 6, 7, 8]);
+    assert.equal(hasCustomWinnerCount(9), false);
+    assert.equal(hasCustomWinnerCount(10), true);
+  });
+
+  it("formats winners with singular and plural wording", () => {
+    const [one] = formatWinners(makeMembers(1), "Chat", 5);
+    assert.ok(one?.startsWith("<b>Winner</b>"));
+    assert.ok(one?.includes("1 winner picked from 5 members."));
+    const [many] = formatWinners(makeMembers(2), "Chat", 5);
+    assert.ok(many?.includes("2 winners picked from 5 members."));
+  });
+});
+
+describe("flipCoin", () => {
+  it("returns heads or tails", () => {
+    assert.equal(flipCoin(() => 0), "Heads");
+    assert.equal(flipCoin(() => 1), "Tails");
   });
 });
 

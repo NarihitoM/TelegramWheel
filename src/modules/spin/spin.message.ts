@@ -48,6 +48,29 @@ export function formatSummary(result: SpinResult, chatTitle: string, teamCount: 
   ].join("\n");
 }
 
+function winnerHeader(winnerCount: number, chatTitle: string, memberCount: number): string[] {
+  return [
+    `<b>${winnerCount === 1 ? "Winner" : "Winners"}</b>`,
+    escapeHtml(chatTitle),
+    `${plural(winnerCount, "winner")} picked from ${plural(memberCount, "member")}.`,
+  ];
+}
+
+export function formatWinners(winners: Member[], chatTitle: string, memberCount: number): string[] {
+  return chunkLines(
+    [...winnerHeader(winners.length, chatTitle, memberCount), "", ...winners.map(memberLine)],
+    MAX_MESSAGE_LENGTH,
+  );
+}
+
+export function formatWinnersSummary(winners: Member[], chatTitle: string, memberCount: number): string {
+  return [
+    ...winnerHeader(winners.length, chatTitle, memberCount),
+    "",
+    "The full list is too long for chat messages, so it is attached as a file.",
+  ].join("\n");
+}
+
 export function toPlainText(chunks: string[]): string {
   return chunks
     .join("\n")
