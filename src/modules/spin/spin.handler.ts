@@ -88,7 +88,7 @@ async function showConfirm(api: Api, wheel: Wheel, teamCount: number, teamSize: 
     `${describeSplit(teamCount, teamSize)}.\n` +
       `${wheel.members.length} members in total` +
       (leftOut > 0 ? `, ${leftOut} left out` : "") +
-      ".\n\nSpin?",
+      ".\n\nDo you want to start spinning?",
     confirmKeyboard(wheel.id),
   );
 }
