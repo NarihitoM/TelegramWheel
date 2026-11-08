@@ -140,8 +140,8 @@ prisma/schema/                  Database schema, one file per area, plus migrati
 
 ## Limits
 
-- The image shows up to 15 names per group. The text message always has the full list.
-- The join panel lists up to 40 names and shows the rest as a count.
+- Big results are split: the image continues large groups on extra cards and spreads them over several pages, sent as albums of up to 10 (up to 20 pages, about 30 seconds of rendering). The text is split into several messages; if it would need more than 8, the bot sends a summary and the full list as a .txt file.
+- The join panel lists up to 40 names and shows the rest as a count. Names longer than 80 characters are shortened in the image only.
 - Image fonts are loaded from Google Fonts per image, only for the characters that appear: Latin, Myanmar, math and styled letters (𝓝𝓪𝓻𝓲, ⓃⒶⓇⒾ), symbols and playing cards, music, and about 30 other scripts (Canadian syllabics, Cherokee, Ethiopic, Runic, Georgian, Armenian, Khmer, Lao, Tibetan and more). Thai, CJK, Arabic, Indic scripts and emoji are loaded by @vercel/og. Characters that no font covers still show as a box.
 
 ## CI/CD

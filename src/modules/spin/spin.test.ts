@@ -11,8 +11,8 @@ import {
   hasCustomGroupSize,
 } from "./spin.keyboard.js";
 import { toVisualOrder } from "./spin.fonts.js";
-import { estimateLines } from "./spin.image.js";
-import { chunkLines, describeSplit, formatResult } from "./spin.message.js";
+import { buildSegments, estimateLines } from "./spin.image.js";
+import { chunkLines, describeSplit, formatResult, formatSummary, MAX_TEXT_MESSAGES, toPlainText } from "./spin.message.js";
 import { isValidConfig, shuffle, splitIntoTeams } from "./spin.service.js";
 import type { Member } from "./spin.types.js";
 
@@ -156,5 +156,43 @@ describe("estimateLines", () => {
     assert.equal(estimateLines("1. R _", 226), 1);
     assert.equal(estimateLines("1. Oakar Min Htin {Riae_}", 226), 2);
     assert.equal(estimateLines("1. " + "x".repeat(500), 226), 3);
+  });
+});
+
+describe("buildSegments", () => {
+  it("keeps small groups on one card", () => {
+    const segments = buildSegments([makeMembers(5), makeMembers(3)]);
+    assert.equal(segments.length, 2);
+    assert.deepEqual(
+      segments.map((segment) => [segment.groupNumber, segment.continued, segment.firstNumber]),
+      [
+        [1, false, 1],
+        [2, false, 1],
+      ],
+    );
+  });
+
+  it("continues large groups on extra cards with running numbers", () => {
+    const segments = buildSegments([makeMembers(70)]);
+    assert.deepEqual(
+      segments.map((segment) => [segment.continued, segment.firstNumber, segment.members.length]),
+      [
+        [false, 1, 30],
+        [true, 31, 30],
+        [true, 61, 10],
+      ],
+    );
+  });
+});
+
+describe("large text results", () => {
+  it("builds a summary and a plain text file", () => {
+    const result = splitIntoTeams(makeMembers(3000), 10, 300);
+    const chunks = formatResult(result, "Big <Chat>", 10, 300);
+    assert.ok(chunks.length > MAX_TEXT_MESSAGES);
+    assert.ok(formatSummary(result, "Big <Chat>", 10, 300).includes("Total members: 3000"));
+    const text = toPlainText(chunks);
+    assert.ok(text.includes("Big <Chat>"));
+    assert.ok(!text.includes("<b>"));
   });
 });

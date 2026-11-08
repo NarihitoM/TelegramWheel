@@ -1,9 +1,9 @@
-import { Composer, GrammyError, InputFile, type Api, type Context, type InlineKeyboard } from "grammy";
+import { Composer, GrammyError, InputFile, InputMediaBuilder, type Api, type Context, type InlineKeyboard } from "grammy";
 import type { User } from "grammy/types";
 import { prisma } from "../../shared/lib/prisma.js";
 import { claimWheelCooldown, isGroupChat, listActiveChats, saveChat } from "../chat/chat.service.js";
 import { listKnownMembers, rememberMembers, scanChatMembers, syncAdmins, toMember } from "../members/members.service.js";
-import { renderResultImage } from "./spin.image.js";
+import { renderResultImages } from "./spin.image.js";
 import {
   confirmKeyboard,
   decodeCallback,
@@ -17,9 +17,9 @@ import {
   pickChatKeyboard,
   type WheelCallback,
 } from "./spin.keyboard.js";
-import { describeSplit, escapeHtml, formatResult } from "./spin.message.js";
+import { describeSplit, escapeHtml, formatResult, formatSummary, MAX_TEXT_MESSAGES, toPlainText } from "./spin.message.js";
 import { isValidConfig, splitIntoTeams } from "./spin.service.js";
-import type { Member } from "./spin.types.js";
+import type { Member, SpinResult } from "./spin.types.js";
 import {
   addWheelMember,
   createWheel,
@@ -36,6 +36,7 @@ import {
 const PICK_CHAT_LIMIT = 30;
 const MAX_LISTED_MEMBERS = 40;
 const EXIT_IDLE_MS = 60_000;
+const ALBUM_SIZE = 10;
 const ENDED_MESSAGE = "This wheel has ended. Send /wheel to start a new one.";
 
 export const spinHandler = new Composer<Context>();
@@ -143,6 +144,54 @@ async function openWheel(api: Api, chatId: number, owner: Member): Promise<Wheel
   return wheel;
 }
 
+async function postResultText(
+  api: Api,
+  chatId: number,
+  result: SpinResult,
+  title: string,
+  teamCount: number,
+  teamSize: number,
+): Promise<void> {
+  const chunks = formatResult(result, title, teamCount, teamSize);
+  if (chunks.length <= MAX_TEXT_MESSAGES) {
+    for (const chunk of chunks) {
+      await api.sendMessage(chatId, chunk, { parse_mode: "HTML" });
+    }
+    return;
+  }
+
+  await api.sendMessage(chatId, formatSummary(result, title, teamCount, teamSize), { parse_mode: "HTML" });
+  await api.sendDocument(chatId, new InputFile(Buffer.from(toPlainText(chunks), "utf8"), "spin-wheel-result.txt"), {
+    caption: "Spin Wheel Result - full list",
+  });
+}
+
+async function postResultImages(api: Api, chatId: number, images: Buffer[]): Promise<void> {
+  const [first] = images;
+  if (!first) {
+    return;
+  }
+  if (images.length === 1) {
+    await api.sendPhoto(chatId, new InputFile(first, "wheel.png"), { caption: "Spin Wheel Result" });
+    return;
+  }
+
+  for (const [albumIndex, album] of chunkItems(images, ALBUM_SIZE).entries()) {
+    await api.sendMediaGroup(
+      chatId,
+      album.map((image, index) =>
+        InputMediaBuilder.photo(new InputFile(image, `wheel-${albumIndex * ALBUM_SIZE + index + 1}.png`), {
+          caption: albumIndex === 0 && index === 0 ? "Spin Wheel Result" : undefined,
+        }),
+      ),
+    );
+  }
+}
+
+function chunkItems<T>(items: T[], size: number): T[][] {
+  return Array.from({ length: Math.ceil(items.length / size) }, (_, index) => items.slice(index * size, (index + 1) * size));
+}
+
 async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
   const { teamCount, teamSize } = wheel;
   if (teamCount === null || teamSize === null || !isValidConfig(wheel.members.length, teamCount, teamSize)) {
@@ -170,21 +219,20 @@ async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
   });
 
   try {
-    for (const chunk of formatResult(result, title, teamCount, teamSize)) {
-      await ctx.api.sendMessage(wheel.chatId, chunk, { parse_mode: "HTML" });
-    }
+    await postResultText(ctx.api, wheel.chatId, result, title, teamCount, teamSize);
   } catch (error) {
     const reason = error instanceof GrammyError ? error.description : "unknown error";
     await editPanel(ctx.api, wheel, `Couldn't post the result: ${escapeHtml(reason)}`);
     return;
   }
 
-  const image = await renderResultImage(result, title).catch(() => null);
-  if (image) {
-    await ctx.api
-      .sendPhoto(wheel.chatId, new InputFile(image, "wheel.png"), { caption: "Spin Wheel Result" })
-      .catch(() => undefined);
-  }
+  const images = await renderResultImages(result, title).catch((error: unknown) => {
+    console.error("Failed to render result images:", error);
+    return [];
+  });
+  await postResultImages(ctx.api, wheel.chatId, images).catch((error: unknown) => {
+    console.error("Failed to send result images:", error);
+  });
 
   if (wheel.messageId !== null) {
     await ctx.api.deleteMessage(wheel.chatId, wheel.messageId).catch(() => undefined);
