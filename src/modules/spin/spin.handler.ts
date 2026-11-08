@@ -67,6 +67,7 @@ const CELEBRATION_EMOJI = "\u{1F389}";
 const DICE_ANIMATION_MS = 4_000;
 const MIN_LOADING_MS = 2_000;
 const MAX_ALERT_LENGTH = 200;
+const CLOSED_MESSAGE_MS = 5_000;
 const CHAT_ACTION_INTERVAL_MS = 4_000;
 
 type ChatAction = "typing" | "upload_photo";
@@ -559,6 +560,8 @@ async function exitWheel(ctx: Context & { from: User }, wheel: Wheel): Promise<v
   await ctx.answerCallbackQuery();
   const closer = toMember(ctx.from).name;
   await closeWheel(ctx.api, wheel, `Wheel closed by ${escapeHtml(closer)}. Send /wheel to start a new one.`);
+  await delay(CLOSED_MESSAGE_MS);
+  await deletePanel(ctx.api, wheel);
 }
 
 spinHandler.command("wheel", async (ctx) => {
