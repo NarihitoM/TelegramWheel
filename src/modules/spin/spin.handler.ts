@@ -34,6 +34,8 @@ import {
 } from "./wheel.service.js";
 
 const PICK_CHAT_LIMIT = 30;
+const MAX_CHANNEL_CANDIDATES = 100;
+const ADMIN_CHECK_BATCH = 10;
 const MAX_LISTED_MEMBERS = 40;
 const EXIT_IDLE_MS = 60_000;
 const ALBUM_SIZE = 10;
@@ -274,9 +276,14 @@ async function startCustomInput(
 }
 
 async function findAdminChannels(api: Api, userId: number): Promise<{ id: number; title: string }[]> {
-  const channels = await listActiveChannels();
-  const checks = await Promise.all(channels.map((channel) => isChatAdmin(api, channel.id, userId)));
-  return channels.filter((_, index) => checks[index]).slice(0, PICK_CHAT_LIMIT);
+  const channels = await listActiveChannels(MAX_CHANNEL_CANDIDATES);
+  const found: { id: number; title: string }[] = [];
+  for (let start = 0; start < channels.length && found.length < PICK_CHAT_LIMIT; start += ADMIN_CHECK_BATCH) {
+    const batch = channels.slice(start, start + ADMIN_CHECK_BATCH);
+    const checks = await Promise.all(batch.map((channel) => isChatAdmin(api, channel.id, userId)));
+    found.push(...batch.filter((_, index) => checks[index]));
+  }
+  return found.slice(0, PICK_CHAT_LIMIT);
 }
 
 async function checkOpenWheel(api: Api, chatId: number, userId: number): Promise<string | null> {
