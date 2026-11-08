@@ -12,7 +12,7 @@ export const START_MESSAGE = [
   "5. Tap <b>Spin</b> to post the result as text and as an image.",
   "",
   "<b>Channels</b>",
-  "Send /wheel to the bot in private chat and choose the channel.",
+  "Channel admins: send /wheel to the bot in private chat and choose the channel.",
   "",
   "<b>Good to know</b>",
   "- Anyone in the chat can start a wheel.",

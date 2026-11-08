@@ -51,7 +51,7 @@ If those two values are not set, or the scan fails, the bot falls back to member
 
 ### Channels
 
-Users can't send commands inside a channel. Send `/wheel` to the bot in a private chat and pick the channel. The wheel is posted in the channel, where subscribers can tap Join. The bot needs permission to post and edit messages there.
+Users can't send commands inside a channel. Channel admins send `/wheel` to the bot in a private chat and pick the channel. The list only shows channels where that person is an admin, so nobody sees chats they don't manage. The wheel is posted in the channel, where subscribers can tap Join. The bot needs permission to post and edit messages there.
 
 ## Setup
 

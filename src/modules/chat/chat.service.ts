@@ -26,11 +26,10 @@ export async function deactivateChat(chatId: number): Promise<void> {
   await prisma.chat.updateMany({ where: { id: BigInt(chatId) }, data: { active: false } });
 }
 
-export async function listActiveChats(limit: number): Promise<{ id: number; title: string }[]> {
+export async function listActiveChannels(): Promise<{ id: number; title: string }[]> {
   const chats = await prisma.chat.findMany({
-    where: { active: true },
+    where: { active: true, type: "channel" },
     orderBy: { updatedAt: "desc" },
-    take: limit,
     select: { id: true, title: true },
   });
   return chats.map((chat) => ({ id: Number(chat.id), title: chat.title }));

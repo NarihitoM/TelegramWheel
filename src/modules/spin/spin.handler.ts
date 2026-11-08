@@ -1,7 +1,7 @@
 import { Composer, GrammyError, InputFile, InputMediaBuilder, type Api, type Context, type InlineKeyboard } from "grammy";
 import type { User } from "grammy/types";
 import { prisma } from "../../shared/lib/prisma.js";
-import { claimWheelCooldown, isGroupChat, listActiveChats, saveChat } from "../chat/chat.service.js";
+import { claimWheelCooldown, isGroupChat, listActiveChannels, saveChat } from "../chat/chat.service.js";
 import { listKnownMembers, rememberMembers, scanChatMembers, syncAdmins, toMember } from "../members/members.service.js";
 import { renderResultImages } from "./spin.image.js";
 import {
@@ -273,13 +273,10 @@ async function startCustomInput(
   await ctx.answerCallbackQuery({ text: "Start a private chat with the bot first, then try again.", show_alert: true });
 }
 
-async function findSharedChats(api: Api, userId: number): Promise<{ id: number; title: string }[]> {
-  const chats = await listActiveChats(PICK_CHAT_LIMIT);
-  const checks = await Promise.allSettled(chats.map((chat) => api.getChatMember(chat.id, userId)));
-  return chats.filter((_, index) => {
-    const check = checks[index];
-    return check?.status === "fulfilled" && !["left", "kicked"].includes(check.value.status);
-  });
+async function findAdminChannels(api: Api, userId: number): Promise<{ id: number; title: string }[]> {
+  const channels = await listActiveChannels();
+  const checks = await Promise.all(channels.map((channel) => isChatAdmin(api, channel.id, userId)));
+  return channels.filter((_, index) => checks[index]).slice(0, PICK_CHAT_LIMIT);
 }
 
 async function checkOpenWheel(api: Api, chatId: number, userId: number): Promise<string | null> {
@@ -322,12 +319,14 @@ spinHandler.command("wheel", async (ctx) => {
   }
 
   if (ctx.chat.type === "private") {
-    const chats = await findSharedChats(ctx.api, user.id);
-    if (chats.length === 0) {
-      await ctx.reply("Couldn't find a group or channel. Please try again.");
+    const channels = await findAdminChannels(ctx.api, user.id);
+    if (channels.length === 0) {
+      await ctx.reply(
+        "No channels found where you are an admin. For groups, send /wheel inside the group instead.",
+      );
       return;
     }
-    await ctx.reply("Choose a chat to spin.", { reply_markup: pickChatKeyboard(chats) });
+    await ctx.reply("Choose a channel to spin.", { reply_markup: pickChatKeyboard(channels) });
     return;
   }
 
@@ -356,10 +355,10 @@ spinHandler.command("wheel", async (ctx) => {
 
 spinHandler.callbackQuery(/^p:/, async (ctx) => {
   const chatId = decodePickChat(ctx.callbackQuery.data);
-  const member = chatId === null ? null : await ctx.api.getChatMember(chatId, ctx.from.id).catch(() => null);
-  const chat = chatId === null ? null : await ctx.api.getChat(chatId).catch(() => null);
-  if (!member || member.status === "left" || member.status === "kicked" || !chat || !isGroupChat(chat)) {
-    await ctx.answerCallbackQuery({ text: "Couldn't open that chat. Please try again.", show_alert: true });
+  const isAdmin = chatId !== null && (await isChatAdmin(ctx.api, chatId, ctx.from.id));
+  const chat = isAdmin && chatId !== null ? await ctx.api.getChat(chatId).catch(() => null) : null;
+  if (!chat || chat.type !== "channel") {
+    await ctx.answerCallbackQuery({ text: "Only channel admins can start a wheel here.", show_alert: true });
     return;
   }
 
