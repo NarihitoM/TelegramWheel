@@ -32,7 +32,7 @@ Bot:  posts the result as text and as an image
 - Buttons only offer choices that fit the member count. When only one size fits, the bot skips that question.
 - Anyone in the chat can start a wheel. Each chat has a 10 second cooldown between wheels.
 - Anyone can tap Join or Leave. Only the starter can press Start, Spin and the number buttons.
-- Members left over after the split are listed as "Not picked".
+- Members left over after the split form one extra group, so nobody is left out.
 - `/start` explains how to use the bot. `/credit` shows who made it.
 
 ### Who is in the list

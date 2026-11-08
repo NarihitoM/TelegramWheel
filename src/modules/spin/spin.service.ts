@@ -36,6 +36,10 @@ export function splitIntoTeams(
   const teams = Array.from({ length: teamCount }, (_, index) =>
     shuffled.slice(index * teamSize, (index + 1) * teamSize),
   );
+  const extra = shuffled.slice(teamCount * teamSize);
+  if (extra.length > 0) {
+    teams.push(extra);
+  }
 
-  return { teams, leftovers: shuffled.slice(teamCount * teamSize) };
+  return { teams };
 }

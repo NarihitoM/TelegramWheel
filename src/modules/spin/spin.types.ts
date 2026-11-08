@@ -6,5 +6,4 @@ export interface Member {
 
 export interface SpinResult {
   teams: Member[][];
-  leftovers: Member[];
 }

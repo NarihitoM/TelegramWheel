@@ -81,14 +81,12 @@ async function showGroupCount(api: Api, wheel: Wheel): Promise<void> {
 
 async function showConfirm(api: Api, wheel: Wheel, teamCount: number, teamSize: number): Promise<void> {
   await moveWheel(wheel.id, OPEN_STEPS, { step: "confirm", teamCount, teamSize });
-  const leftOut = wheel.members.length - teamCount * teamSize;
   await editPanel(
     api,
     wheel,
-    `${describeSplit(teamCount, teamSize)}.\n` +
-      `${wheel.members.length} members in total` +
-      (leftOut > 0 ? `, ${leftOut} left out` : "") +
-      ".\n\nDo you want to start spinning?",
+    `${describeSplit(teamCount, teamSize, wheel.members.length)}.\n` +
+      `${wheel.members.length} members in total.\n\n` +
+      "Do you want to start spinning?",
     confirmKeyboard(wheel.id),
   );
 }
@@ -164,12 +162,12 @@ async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
       teamCount,
       teamSize,
       teams: result.teams.map((team) => team.map(({ id, name, username }) => ({ id, name, username }))),
-      leftovers: result.leftovers.map(({ id, name, username }) => ({ id, name, username })),
+      leftovers: [],
     },
   });
 
   try {
-    for (const chunk of formatResult(result, title)) {
+    for (const chunk of formatResult(result, title, teamCount, teamSize)) {
       await ctx.api.sendMessage(wheel.chatId, chunk, { parse_mode: "HTML" });
     }
   } catch (error) {

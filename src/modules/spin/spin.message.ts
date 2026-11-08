@@ -10,8 +10,10 @@ function plural(count: number, word: string): string {
   return `${count} ${word}${count === 1 ? "" : "s"}`;
 }
 
-export function describeSplit(teamCount: number, teamSize: number): string {
-  return `${plural(teamCount, "group")}, each with ${plural(teamSize, "member")}`;
+export function describeSplit(teamCount: number, teamSize: number, memberCount: number): string {
+  const main = `${plural(teamCount, "group")}, each with ${plural(teamSize, "member")}`;
+  const extra = memberCount - teamCount * teamSize;
+  return extra > 0 ? `${main}, plus 1 extra group with ${plural(extra, "member")}` : main;
 }
 
 function memberLine(member: Member, index: number): string {
@@ -19,22 +21,18 @@ function memberLine(member: Member, index: number): string {
   return `${index + 1}. ${escapeHtml(member.name)}${username}`;
 }
 
-export function formatResult(result: SpinResult, chatTitle: string): string[] {
-  const teamSize = result.teams[0]?.length ?? 0;
-  const total = result.teams.flat().length + result.leftovers.length;
+export function formatResult(result: SpinResult, chatTitle: string, teamCount: number, teamSize: number): string[] {
+  const total = result.teams.flat().length;
   const lines = [
     "<b>Spin Wheel Result</b>",
     escapeHtml(chatTitle),
-    `${describeSplit(result.teams.length, teamSize)} (${plural(total, "member")} total)`,
+    `${describeSplit(teamCount, teamSize, total)}.`,
+    `Total groups: ${result.teams.length} | Total members: ${total}`,
   ];
 
   result.teams.forEach((team, index) => {
     lines.push("", `<b>Group ${index + 1}</b>`, ...team.map(memberLine));
   });
-
-  if (result.leftovers.length > 0) {
-    lines.push("", "<b>Not picked</b>", ...result.leftovers.map(memberLine));
-  }
 
   return chunkLines(lines, MAX_MESSAGE_LENGTH);
 }

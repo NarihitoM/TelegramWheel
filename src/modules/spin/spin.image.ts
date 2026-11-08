@@ -86,12 +86,11 @@ export async function renderResultImage(result: SpinResult, chatTitle: string): 
     card(`Group ${index + 1}`, team, COLORS[index % COLORS.length] ?? "#3b82f6", cardWidth, rowHeight - GAP),
   );
 
-  const totalMembers = result.teams.flat().length + result.leftovers.length;
+  const totalMembers = result.teams.flat().length;
   const subtitle = [
     `Total groups: ${result.teams.length}`,
     `Total members: ${totalMembers}`,
     `Per group: ${result.teams[0]?.length ?? 0}`,
-    result.leftovers.length > 0 ? `Not picked: ${result.leftovers.length}` : "",
     hiddenTeams > 0 ? `+${hiddenTeams} groups in text` : "",
   ]
     .filter(Boolean)
@@ -120,7 +119,7 @@ export async function renderResultImage(result: SpinResult, chatTitle: string): 
   );
 
   const fonts = await loadImageFonts([
-    "Spin Wheel Result Group 0123456789 x | + more members not picked groups in text",
+    "Spin Wheel Result Group Total groups members Per 0123456789 : | + more in text",
     chatTitle,
     ...shownTeams.flat().map((member) => member.name),
   ]);

@@ -18,7 +18,7 @@ export const START_MESSAGE = [
   "- Anyone in the chat can start a wheel.",
   "- Only the starter can press Start, Spin and the number buttons.",
   "- Wait 10 seconds between wheels in the same chat.",
-  "- Members who don't fit into a group are listed as Not picked.",
+  "- Members who don't fit go into one extra group, so nobody is left out.",
   "",
   "<b>Commands</b>",
   "/wheel - spin the wheel",

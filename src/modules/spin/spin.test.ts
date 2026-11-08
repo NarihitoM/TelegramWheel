@@ -35,22 +35,24 @@ describe("shuffle", () => {
 });
 
 describe("splitIntoTeams", () => {
-  it("splits evenly with no leftovers", () => {
-    const { teams, leftovers } = splitIntoTeams(makeMembers(20), 4, 5);
+  it("splits evenly with no extra group", () => {
+    const { teams } = splitIntoTeams(makeMembers(20), 4, 5);
     assert.equal(teams.length, 4);
     teams.forEach((team) => assert.equal(team.length, 5));
-    assert.equal(leftovers.length, 0);
   });
 
-  it("puts extra members into leftovers", () => {
-    const { teams, leftovers } = splitIntoTeams(makeMembers(23), 4, 5);
-    assert.equal(teams.flat().length, 20);
-    assert.equal(leftovers.length, 3);
+  it("puts remaining members into an extra group", () => {
+    const { teams } = splitIntoTeams(makeMembers(7), 3, 2);
+    assert.deepEqual(
+      teams.map((team) => team.length),
+      [2, 2, 2, 1],
+    );
   });
 
-  it("never duplicates a member", () => {
-    const { teams, leftovers } = splitIntoTeams(makeMembers(31), 5, 6);
-    const ids = [...teams.flat(), ...leftovers].map((member) => member.id);
+  it("never duplicates or drops a member", () => {
+    const { teams } = splitIntoTeams(makeMembers(31), 5, 6);
+    const ids = teams.flat().map((member) => member.id);
+    assert.equal(ids.length, 31);
     assert.equal(new Set(ids).size, 31);
   });
 
@@ -106,16 +108,18 @@ describe("keyboard options", () => {
 });
 
 describe("formatResult", () => {
-  it("escapes names and lists leftovers", () => {
+  it("escapes names and lists every group with totals", () => {
     const members: Member[] = [
       { id: "1", name: "A <b>", username: "alpha" },
       { id: "2", name: "B & C" },
       { id: "3", name: "D" },
     ];
-    const [text] = formatResult({ teams: [[members[0] as Member], [members[1] as Member]], leftovers: [members[2] as Member] }, "Chat");
+    const teams = [[members[0] as Member], [members[1] as Member], [members[2] as Member]];
+    const [text] = formatResult({ teams }, "Chat", 2, 1);
     assert.ok(text?.includes("A &lt;b&gt; (@alpha)"));
     assert.ok(text?.includes("B &amp; C"));
-    assert.ok(text?.includes("<b>Not picked</b>"));
+    assert.ok(text?.includes("<b>Group 3</b>"));
+    assert.ok(text?.includes("Total groups: 3 | Total members: 3"));
   });
 
   it("splits long results into several messages", () => {
@@ -127,9 +131,9 @@ describe("formatResult", () => {
 
 describe("toVisualOrder", () => {
   it("moves the e vowel and medial ra before the consonant", () => {
-    assert.equal(toVisualOrder("မော"), "ေမာ");
-    assert.equal(toVisualOrder("ကျော်"), "ေကျာ်");
-    assert.equal(toVisualOrder("ကြည်"), "ြကည်");
+    assert.equal(toVisualOrder("\u1019\u1031\u102C"), "\u1031\u1019\u102C");
+    assert.equal(toVisualOrder("\u1000\u103B\u1031\u102C\u103A"), "\u1031\u1000\u103B\u102C\u103A");
+    assert.equal(toVisualOrder("\u1000\u103C\u100A\u103A"), "\u103C\u1000\u100A\u103A");
   });
 
   it("leaves other text unchanged", () => {
@@ -140,7 +144,8 @@ describe("toVisualOrder", () => {
 
 describe("describeSplit", () => {
   it("uses clear wording with singular and plural", () => {
-    assert.equal(describeSplit(8, 1), "8 groups, each with 1 member");
-    assert.equal(describeSplit(2, 5), "2 groups, each with 5 members");
+    assert.equal(describeSplit(8, 1, 8), "8 groups, each with 1 member");
+    assert.equal(describeSplit(2, 5, 10), "2 groups, each with 5 members");
+    assert.equal(describeSplit(3, 2, 7), "3 groups, each with 2 members, plus 1 extra group with 1 member");
   });
 });
