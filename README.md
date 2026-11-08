@@ -1,5 +1,13 @@
 # Telegram Spin Wheel Bot
 
+<p align="center">
+  <img src="public/img/Telegramspinwheel.jpg" alt="Telegram Spin Wheel Bot" width="240" />
+</p>
+
+<p align="center">
+  <a href="https://t.me/tg_spinwheel_bot">Open @tg_spinwheel_bot in Telegram</a>
+</p>
+
 A Telegram bot that splits a group's or channel's members into random groups. Anyone in the chat sends `/wheel`, members join with a button, the starter picks the number of groups and members per group, and the bot posts the result as text and as an image.
 
 Built with Node.js, TypeScript, [grammY](https://grammy.dev), Prisma (Postgres) and `@vercel/og`. It runs on Vercel as a webhook and only needs a bot token and a database.
