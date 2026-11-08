@@ -1,4 +1,5 @@
 import { ImageResponse } from "@vercel/og";
+import { IMAGE_FONT_FAMILY, loadImageFonts, toVisualOrder } from "./spin.fonts.js";
 import type { Member, SpinResult } from "./spin.types.js";
 
 type Style = Record<string, string | number>;
@@ -45,7 +46,7 @@ function cardHeight(size: number): number {
 
 function card(title: string, members: Member[], color: string, width: number, height: number): OgNode {
   const names = members.slice(0, MAX_NAMES_PER_CARD).map((member, index) =>
-    h("div", { ...NAME_STYLE, color: "#e5e7eb" }, `${index + 1}. ${member.name}`),
+    h("div", { ...NAME_STYLE, color: "#e5e7eb" }, `${index + 1}. ${toVisualOrder(member.name)}`),
   );
   if (members.length > MAX_NAMES_PER_CARD) {
     names.push(
@@ -103,17 +104,23 @@ export async function renderResultImage(result: SpinResult, chatTitle: string): 
       padding: PADDING,
       backgroundColor: "#111827",
       color: "#ffffff",
+      fontFamily: IMAGE_FONT_FAMILY,
     },
     [
       h("div", { display: "flex", flexDirection: "column", height: HEADER_HEIGHT }, [
         h("div", { display: "flex", fontSize: 52, fontWeight: 700 }, "Spin Wheel Result"),
-        h("div", { display: "flex", fontSize: 26, color: "#9ca3af", marginTop: 8 }, chatTitle),
+        h("div", { display: "flex", fontSize: 26, color: "#9ca3af", marginTop: 8 }, toVisualOrder(chatTitle)),
         h("div", { display: "flex", fontSize: 24, color: "#6b7280", marginTop: 4 }, subtitle),
       ]),
       h("div", { display: "flex", flexWrap: "wrap", gap: GAP }, cards),
     ],
   );
 
-  const response = new ImageResponse(root, { width: WIDTH, height });
+  const fonts = await loadImageFonts([
+    "Spin Wheel Result Group 0123456789 x | + more members not picked groups in text",
+    chatTitle,
+    ...shownTeams.flat().map((member) => member.name),
+  ]);
+  const response = new ImageResponse(root, { width: WIDTH, height, fonts });
   return Buffer.from(await response.arrayBuffer());
 }

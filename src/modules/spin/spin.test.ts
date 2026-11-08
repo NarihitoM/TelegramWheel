@@ -10,6 +10,7 @@ import {
   hasCustomGroupCount,
   hasCustomGroupSize,
 } from "./spin.keyboard.js";
+import { toVisualOrder } from "./spin.fonts.js";
 import { chunkLines, formatResult } from "./spin.message.js";
 import { isValidConfig, shuffle, splitIntoTeams } from "./spin.service.js";
 import type { Member } from "./spin.types.js";
@@ -121,5 +122,18 @@ describe("formatResult", () => {
     const chunks = chunkLines(Array.from({ length: 100 }, () => "x".repeat(50)), 1000);
     assert.ok(chunks.length > 1);
     chunks.forEach((chunk) => assert.ok(chunk.length <= 1000));
+  });
+});
+
+describe("toVisualOrder", () => {
+  it("moves the e vowel and medial ra before the consonant", () => {
+    assert.equal(toVisualOrder("မော"), "ေမာ");
+    assert.equal(toVisualOrder("ကျော်"), "ေကျာ်");
+    assert.equal(toVisualOrder("ကြည်"), "ြကည်");
+  });
+
+  it("leaves other text unchanged", () => {
+    assert.equal(toVisualOrder("Aung Thanlwin Oo"), "Aung Thanlwin Oo");
+    assert.equal(toVisualOrder("\u{1D4DD}\u{1D4EA}"), "\u{1D4DD}\u{1D4EA}");
   });
 });
