@@ -11,7 +11,7 @@
 A Telegram bot for random picks in groups and channels. Anyone in the chat sends `/wheel` and chooses a mode:
 
 - **Split into groups**: members join with a button, the starter picks the number of groups and members per group, and the bot posts the result as text and as an image.
-- **Pick a winner**: members join with a button, the starter picks how many winners, and the bot posts the winners.
+- **Pick a winner**: members join with a button, the starter picks how many winners, and the bot posts the winners as text and as an image, followed by a celebration animation.
 - **Coin flip**: an animated coin sticker, like the dice, then heads or tails.
 - **Dice**: Telegram's animated dice, followed by a message with the number.
 
@@ -48,9 +48,9 @@ User: taps [Spin]
 Bot:  posts the result as text and as an image
 ```
 
-- Pick a winner works the same way up to Start, then asks "How many winners?" (1 up to one less than the member count) and posts the winners.
+- Pick a winner works the same way up to Start, then asks "How many winners?" (1 up to one less than the member count) and posts the winners as text and as an image, then sends an animated party popper.
 - Coin flip and Dice are one tap. Coin flip sends an animated coin sticker that lands on the result, swaps it for a still coin once it lands (so it stops moving), then replies with "Name flipped Heads." Dice sends Telegram's animated dice and, once it stops, replies with "Name rolled a 4."
-- While the bot works, the panel shows "Fetching members list...", "Spinning..." or "Picking..." with an animated sticker under it (spinning dots or a turning wheel). The sticker is removed once the step is done.
+- While the bot works, the panel keeps the chosen options, adds "Fetching members list...", "Spinning..." or "Picking..." and shows an animated sticker under it (spinning dots or a turning wheel). The panel and sticker are removed only after the result is posted.
 - Buttons only offer choices that fit the member count. When only one size fits, the bot skips that question.
 - Anyone in the chat can send `/wheel` and choose from the menu. Whoever chooses Split into groups or Pick a winner becomes the starter. Each chat has a 10 second cooldown between wheels.
 - Anyone can tap Join or Leave. Only the starter can press Start, Spin and the number buttons.

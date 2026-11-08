@@ -212,3 +212,166 @@ export async function renderResultImages(result: SpinResult, chatTitle: string):
   }
   return images;
 }
+
+const WINNER_COLUMNS = 2;
+const MAX_WINNERS_IN_IMAGE = 30;
+const WINNER_HEADER_HEIGHT = 230;
+const WINNER_FONT_SIZE = 30;
+const WINNER_LINE_HEIGHT = 42;
+const WINNER_CARD_PADDING = 24;
+const WINNER_NUMBER_SIZE = 52;
+const GOLD = "#fbbf24";
+
+const CONFETTI = [
+  { left: 60, top: 40, color: "#ef4444", rotate: 20 },
+  { left: 180, top: 120, color: "#10b981", rotate: -30 },
+  { left: 900, top: 30, color: "#3b82f6", rotate: 45 },
+  { left: 1040, top: 110, color: "#ec4899", rotate: -15 },
+  { left: 760, top: 150, color: "#f59e0b", rotate: 60 },
+  { left: 1110, top: 40, color: "#8b5cf6", rotate: 10 },
+  { left: 380, top: 30, color: "#14b8a6", rotate: -50 },
+];
+
+function confetti(): OgNode[] {
+  return CONFETTI.map(({ left, top, color, rotate }) =>
+    h("div", {
+      display: "flex",
+      position: "absolute",
+      left,
+      top,
+      width: 14,
+      height: 28,
+      borderRadius: 4,
+      backgroundColor: color,
+      transform: `rotate(${rotate}deg)`,
+    }),
+  );
+}
+
+function winnerCard(member: Member, rank: number, width: number, height: number, single: boolean): OgNode {
+  const fontSize = single ? 64 : WINNER_FONT_SIZE;
+  return h(
+    "div",
+    {
+      display: "flex",
+      flexDirection: single ? "column" : "row",
+      alignItems: "center",
+      justifyContent: single ? "center" : "flex-start",
+      width,
+      height,
+      padding: WINNER_CARD_PADDING,
+      borderRadius: 24,
+      backgroundColor: "#1f2937",
+      border: `3px solid ${GOLD}`,
+    },
+    [
+      h(
+        "div",
+        {
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: single ? 96 : WINNER_NUMBER_SIZE,
+          height: single ? 96 : WINNER_NUMBER_SIZE,
+          borderRadius: 999,
+          backgroundColor: GOLD,
+          color: "#111827",
+          fontSize: single ? 48 : 26,
+          fontWeight: 700,
+          marginRight: single ? 0 : 20,
+          marginBottom: single ? 24 : 0,
+        },
+        String(rank),
+      ),
+      h(
+        "div",
+        { display: "flex", flexDirection: "column", alignItems: single ? "center" : "flex-start", flex: 1 },
+        [
+          h(
+            "div",
+            {
+              display: "block",
+              fontSize,
+              fontWeight: 700,
+              lineHeight: `${Math.round(fontSize * 1.4)}px`,
+              color: "#ffffff",
+              wordBreak: "break-word",
+              textAlign: single ? "center" : "left",
+            },
+            toVisualOrder(displayName(member.name)),
+          ),
+          ...(member.username
+            ? [h("div", { display: "flex", fontSize: single ? 32 : 22, color: "#9ca3af", marginTop: 4 }, `@${member.username}`)]
+            : []),
+        ],
+      ),
+    ],
+  );
+}
+
+function winnerCardHeight(member: Member, textWidth: number): number {
+  const lines = estimateLines(displayName(member.name), textWidth, WINNER_FONT_SIZE);
+  const username = member.username ? 30 : 0;
+  return Math.max(WINNER_NUMBER_SIZE, lines * WINNER_LINE_HEIGHT + username) + WINNER_CARD_PADDING * 2 + 6;
+}
+
+export async function renderWinnersImage(winners: Member[], chatTitle: string, memberCount: number): Promise<Buffer> {
+  const shown = winners.slice(0, MAX_WINNERS_IN_IMAGE);
+  const single = shown.length === 1;
+  const columns = single ? 1 : WINNER_COLUMNS;
+  const cardWidth = Math.floor((WIDTH - PADDING * 2 - GAP * (columns - 1)) / columns);
+  const textWidth = cardWidth - WINNER_CARD_PADDING * 2 - WINNER_NUMBER_SIZE - 20;
+  const rows = chunk(shown, columns).map((members) => ({
+    members,
+    height: single ? 320 : Math.max(...members.map((member) => winnerCardHeight(member, textWidth))),
+  }));
+  const hidden = winners.length - shown.length;
+  const height =
+    WINNER_HEADER_HEIGHT + PADDING * 2 + rows.reduce((total, row) => total + row.height + GAP, 0) + (hidden > 0 ? 50 : 0);
+
+  const title = winners.length === 1 ? "Winner" : "Winners";
+  const subtitle = `${winners.length} ${winners.length === 1 ? "winner" : "winners"} picked from ${memberCount} members`;
+  const fonts = await loadImageFonts([
+    `${title} ${subtitle} more in text + @ 0123456789`,
+    chatTitle,
+    ...shown.flatMap((member) => [member.name, member.username ?? ""]),
+  ]);
+
+  let rank = 0;
+  const cards = rows.flatMap((row) =>
+    row.members.map((member) => {
+      rank += 1;
+      return winnerCard(member, rank, cardWidth, row.height, single);
+    }),
+  );
+
+  const root = h(
+    "div",
+    {
+      display: "flex",
+      flexDirection: "column",
+      position: "relative",
+      width: WIDTH,
+      height,
+      padding: PADDING,
+      backgroundColor: "#111827",
+      color: "#ffffff",
+      fontFamily: IMAGE_FONT_FAMILY,
+    },
+    [
+      ...confetti(),
+      h("div", { display: "flex", flexDirection: "column", alignItems: "center", height: WINNER_HEADER_HEIGHT }, [
+        h("div", { display: "flex", fontSize: 72, fontWeight: 700, color: GOLD }, title),
+        h("div", { display: "flex", fontSize: 28, color: "#9ca3af", marginTop: 8 }, toVisualOrder(chatTitle)),
+        h("div", { display: "flex", fontSize: 24, color: "#6b7280", marginTop: 4 }, subtitle),
+      ]),
+      h("div", { display: "flex", flexWrap: "wrap", gap: GAP }, cards),
+      ...(hidden > 0
+        ? [h("div", { display: "flex", justifyContent: "center", fontSize: 24, color: "#9ca3af", marginTop: 16 }, `+${hidden} more in text`)]
+        : []),
+    ],
+  );
+
+  const response = new ImageResponse(root, { width: WIDTH, height, fonts });
+  return Buffer.from(await response.arrayBuffer());
+}

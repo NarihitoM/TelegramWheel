@@ -4,7 +4,7 @@ import { prisma } from "../../shared/lib/prisma.js";
 import { claimWheelCooldown, isGroupChat, listActiveChannels, saveChat } from "../chat/chat.service.js";
 import { listKnownMembers, rememberMembers, scanChatMembers, syncAdmins, toMember } from "../members/members.service.js";
 import { COIN_ANIMATION_MS, sendCoinSticker, showLoading } from "./spin.animation.js";
-import { renderResultImages } from "./spin.image.js";
+import { renderResultImages, renderWinnersImage } from "./spin.image.js";
 import {
   confirmKeyboard,
   decodeCallback,
@@ -30,6 +30,7 @@ import {
   formatWinners,
   formatWinnersSummary,
   MAX_TEXT_MESSAGES,
+  plural,
   toPlainText,
 } from "./spin.message.js";
 import { flipCoin, isValidConfig, pickWinners, splitIntoTeams } from "./spin.service.js";
@@ -56,6 +57,7 @@ const MAX_LISTED_MEMBERS = 40;
 const EXIT_IDLE_MS = 60_000;
 const ALBUM_SIZE = 10;
 const DICE_EMOJI = "\u{1F3B2}";
+const CELEBRATION_EMOJI = "\u{1F389}";
 const DICE_ANIMATION_MS = 4_000;
 const MIN_LOADING_MS = 2_000;
 const ENDED_MESSAGE = "This wheel has ended. Send /wheel to start a new one.";
@@ -114,14 +116,17 @@ async function showGroupCount(api: Api, wheel: Wheel): Promise<void> {
   );
 }
 
+function splitSummary(wheel: Wheel, teamCount: number, teamSize: number): string {
+  const total = wheel.members.length;
+  return `${describeSplit(teamCount, teamSize, total)}.\n${total} members in total.`;
+}
+
 async function showConfirm(api: Api, wheel: Wheel, teamCount: number, teamSize: number): Promise<void> {
   await moveWheel(wheel.id, OPEN_STEPS, { step: "confirm", teamCount, teamSize });
   await editPanel(
     api,
     wheel,
-    `${describeSplit(teamCount, teamSize, wheel.members.length)}.\n` +
-      `${wheel.members.length} members in total.\n\n` +
-      "Do you want to start spinning?",
+    `${splitSummary(wheel, teamCount, teamSize)}\n\nDo you want to start spinning?`,
     confirmKeyboard(wheel.id),
   );
 }
@@ -186,7 +191,7 @@ async function openWheel(api: Api, menu: Wheel, owner: Member, mode: WheelMode):
   if (messageId === null) {
     return;
   }
-  await editPanel(api, menu, "Fetching members list...");
+  await editPanel(api, menu, `${MENU_TEXT}\n\n<b>Fetching members list...</b>`);
   const stopLoading = await showLoading(api, chatId, "loading");
 
   try {
@@ -238,7 +243,8 @@ async function postWinners(api: Api, wheel: Wheel, count: number): Promise<void>
     return;
   }
 
-  await editPanel(api, wheel, "Picking...");
+  const total = wheel.members.length;
+  await editPanel(api, wheel, `${plural(count, "winner")} from ${plural(total, "member")}.\n\n<b>Picking...</b>`);
   const stopLoading = await showLoading(api, wheel.chatId, "wheel");
   const title = await chatTitle(wheel.chatId);
   const winners = pickWinners(wheel.members, count);
@@ -254,7 +260,10 @@ async function postWinners(api: Api, wheel: Wheel, count: number): Promise<void>
     },
   });
 
-  const total = wheel.members.length;
+  const image = renderWinnersImage(winners, title, total).catch((error: unknown) => {
+    console.error("Failed to render winners image:", error);
+    return null;
+  });
   await delay(MIN_LOADING_MS);
   try {
     await postText(
@@ -269,8 +278,16 @@ async function postWinners(api: Api, wheel: Wheel, count: number): Promise<void>
     await postFailure(api, wheel, error);
     return;
   }
+
+  const picture = await image;
+  if (picture) {
+    await api
+      .sendPhoto(wheel.chatId, new InputFile(picture, "winners.png"), { caption: count === 1 ? "Winner" : "Winners" })
+      .catch((error: unknown) => console.error("Failed to send winners image:", error));
+  }
   await stopLoading();
   await deletePanel(api, wheel);
+  await api.sendMessage(wheel.chatId, CELEBRATION_EMOJI).catch(() => undefined);
 }
 
 async function postResultImages(api: Api, chatId: number, images: Buffer[]): Promise<void> {
@@ -309,7 +326,7 @@ async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
     return;
   }
 
-  await editPanel(ctx.api, wheel, "Spinning...");
+  await editPanel(ctx.api, wheel, `${splitSummary(wheel, teamCount, teamSize)}\n\n<b>Spinning...</b>`);
   const stopLoading = await showLoading(ctx.api, wheel.chatId, "wheel");
   const title = await chatTitle(wheel.chatId);
   const result = splitIntoTeams(wheel.members, teamCount, teamSize);

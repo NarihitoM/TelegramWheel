@@ -10,7 +10,7 @@ export const START_MESSAGE = [
   "3. Coin flip and Dice play an animation, then post the result.",
   "4. For groups and winners, all members are added automatically. Members who want out tap <b>Leave</b>. Anyone missing taps <b>Join</b>.",
   "5. The starter taps <b>Start</b>, then picks the number of groups and members per group, or the number of winners.",
-  "6. The result is posted in the chat. Group splits also come with an image.",
+  "6. The result is posted in the chat as text and as an image. Winners also get a celebration.",
   "",
   "<b>Channels</b>",
   "Channel admins: send /wheel to the bot in private chat and choose the channel.",
