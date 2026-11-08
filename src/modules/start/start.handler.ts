@@ -25,6 +25,7 @@ export const START_MESSAGE = [
   "/wheel - spin the wheel",
   "/start - show this message",
   "/credit - who made this bot",
+  "/donate - support the bot",
 ].join("\n");
 
 export const startHandler = new Composer<Context>();

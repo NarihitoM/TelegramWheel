@@ -10,6 +10,7 @@ export const BOT_COMMANDS = [
   { command: "start", description: "How to use this bot" },
   { command: "wheel", description: "Spin the wheel and split members into groups" },
   { command: "credit", description: "Who made this bot" },
+  { command: "donate", description: "Support the bot" },
 ];
 
 export const BOT_DESCRIPTION = [
@@ -21,6 +22,7 @@ export const BOT_DESCRIPTION = [
   "3. Pick the number of groups and members per group.",
   "4. Tap Spin to get the result as text and an image.",
   "",
+  "Support the bot: send /donate",
   "Made by Narihito - github.com/NarihitoM",
 ].join("\n");
 

@@ -27,4 +27,13 @@ export const env = {
   get tgApiHash() {
     return process.env.TG_API_HASH || null;
   },
+  get donateName() {
+    return process.env.DONATE_NAME || null;
+  },
+  get donateKbzPay() {
+    return process.env.DONATE_KBZPAY || null;
+  },
+  get donateWave() {
+    return process.env.DONATE_WAVE || null;
+  },
 };
