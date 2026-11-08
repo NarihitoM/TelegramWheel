@@ -3,7 +3,7 @@ import type { User } from "grammy/types";
 import { prisma } from "../../shared/lib/prisma.js";
 import { claimWheelCooldown, isGroupChat, listActiveChannels, saveChat } from "../chat/chat.service.js";
 import { listKnownMembers, rememberMembers, scanChatMembers, syncAdmins, toMember } from "../members/members.service.js";
-import { COIN_ANIMATION_MS, sendCoinSticker, showLoading } from "./spin.animation.js";
+import { COIN_ANIMATION_MS, sendCoinSticker, showLoading, type AnimationName } from "./spin.animation.js";
 import { renderResultImages, renderWinnersImage } from "./spin.image.js";
 import {
   confirmKeyboard,
@@ -186,30 +186,56 @@ async function deletePanel(api: Api, wheel: Wheel): Promise<void> {
   }
 }
 
+interface Loading {
+  panelHidden: boolean;
+  stop: () => Promise<void>;
+}
+
+async function startLoading(api: Api, wheel: Wheel, name: AnimationName, status: string): Promise<Loading> {
+  const stop = await showLoading(api, wheel.chatId, name);
+  if (stop) {
+    await deletePanel(api, wheel);
+    return { panelHidden: true, stop };
+  }
+  await editPanel(api, wheel, status);
+  return { panelHidden: false, stop: async () => undefined };
+}
+
 async function openWheel(api: Api, menu: Wheel, owner: Member, mode: WheelMode): Promise<void> {
   const { chatId, messageId } = menu;
   if (messageId === null) {
     return;
   }
-  await editPanel(api, menu, `${MENU_TEXT}\n\n<b>Fetching members list...</b>`);
-  const stopLoading = await showLoading(api, chatId, "loading");
+  const loading = await startLoading(api, menu, "loading", `${MENU_TEXT}\n\n<b>Fetching members list...</b>`);
 
   try {
     const members = await collectMembers(api, chatId, owner);
     const created = await createWheel(chatId, owner, members, { mode });
-    await setWheelMessage(created.id, messageId);
-    await showJoin(api, { ...created, messageId });
+    await loading.stop();
+    if (!loading.panelHidden) {
+      await setWheelMessage(created.id, messageId);
+      await showJoin(api, { ...created, messageId });
+      return;
+    }
+    const panel = await api.sendMessage(chatId, joinText(created), {
+      parse_mode: "HTML",
+      reply_markup: joinKeyboard(created.id),
+    });
+    await setWheelMessage(created.id, panel.message_id);
   } catch (error) {
-    await editPanel(api, menu, "Couldn't fetch the members list. Please try again.");
+    await loading.stop();
+    await deletePanel(api, menu);
+    await api.sendMessage(chatId, "Couldn't fetch the members list. Please try again.").catch(() => undefined);
     throw error;
-  } finally {
-    await stopLoading();
   }
 }
 
 async function postFailure(api: Api, wheel: Wheel, error: unknown): Promise<void> {
   const reason = error instanceof GrammyError ? error.description : "unknown error";
-  await editPanel(api, wheel, `Couldn't post the result: ${escapeHtml(reason)}`);
+  await deletePanel(api, wheel);
+  await api
+    .sendMessage(wheel.chatId, `Couldn't post the result: ${escapeHtml(reason)}`, { parse_mode: "HTML" })
+    .catch(() => undefined);
 }
 
 async function postText(
@@ -244,8 +270,12 @@ async function postWinners(api: Api, wheel: Wheel, count: number): Promise<void>
   }
 
   const total = wheel.members.length;
-  await editPanel(api, wheel, `${plural(count, "winner")} from ${plural(total, "member")}.\n\n<b>Picking...</b>`);
-  const stopLoading = await showLoading(api, wheel.chatId, "wheel");
+  const loading = await startLoading(
+    api,
+    wheel,
+    "wheel",
+    `${plural(count, "winner")} from ${plural(total, "member")}.\n\n<b>Picking...</b>`,
+  );
   const title = await chatTitle(wheel.chatId);
   const winners = pickWinners(wheel.members, count);
 
@@ -260,11 +290,16 @@ async function postWinners(api: Api, wheel: Wheel, count: number): Promise<void>
     },
   });
 
-  const image = renderWinnersImage(winners, title, total).catch((error: unknown) => {
-    console.error("Failed to render winners image:", error);
-    return null;
-  });
-  await delay(MIN_LOADING_MS);
+  const [picture] = await Promise.all([
+    renderWinnersImage(winners, title, total).catch((error: unknown) => {
+      console.error("Failed to render winners image:", error);
+      return null;
+    }),
+    delay(MIN_LOADING_MS),
+  ]);
+  await loading.stop();
+  await deletePanel(api, wheel);
+
   try {
     await postText(
       api,
@@ -274,19 +309,15 @@ async function postWinners(api: Api, wheel: Wheel, count: number): Promise<void>
       count === 1 ? "Winner" : "Winners",
     );
   } catch (error) {
-    await stopLoading();
     await postFailure(api, wheel, error);
     return;
   }
 
-  const picture = await image;
   if (picture) {
     await api
       .sendPhoto(wheel.chatId, new InputFile(picture, "winners.png"), { caption: count === 1 ? "Winner" : "Winners" })
       .catch((error: unknown) => console.error("Failed to send winners image:", error));
   }
-  await stopLoading();
-  await deletePanel(api, wheel);
   await api.sendMessage(wheel.chatId, CELEBRATION_EMOJI).catch(() => undefined);
 }
 
@@ -326,8 +357,12 @@ async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
     return;
   }
 
-  await editPanel(ctx.api, wheel, `${splitSummary(wheel, teamCount, teamSize)}\n\n<b>Spinning...</b>`);
-  const stopLoading = await showLoading(ctx.api, wheel.chatId, "wheel");
+  const loading = await startLoading(
+    ctx.api,
+    wheel,
+    "wheel",
+    `${splitSummary(wheel, teamCount, teamSize)}\n\n<b>Spinning...</b>`,
+  );
   const title = await chatTitle(wheel.chatId);
   const result = splitIntoTeams(wheel.members, teamCount, teamSize);
 
@@ -342,7 +377,16 @@ async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
     },
   });
 
-  await delay(MIN_LOADING_MS);
+  const [images] = await Promise.all([
+    renderResultImages(result, title).catch((error: unknown) => {
+      console.error("Failed to render result images:", error);
+      return [];
+    }),
+    delay(MIN_LOADING_MS),
+  ]);
+  await loading.stop();
+  await deletePanel(ctx.api, wheel);
+
   try {
     await postText(
       ctx.api,
@@ -352,20 +396,13 @@ async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
       "Spin Wheel Result",
     );
   } catch (error) {
-    await stopLoading();
     await postFailure(ctx.api, wheel, error);
     return;
   }
 
-  const images = await renderResultImages(result, title).catch((error: unknown) => {
-    console.error("Failed to render result images:", error);
-    return [];
-  });
   await postResultImages(ctx.api, wheel.chatId, images).catch((error: unknown) => {
     console.error("Failed to send result images:", error);
   });
-  await stopLoading();
-  await deletePanel(ctx.api, wheel);
 }
 
 async function askCustomNumber(ctx: Context, wheel: Wheel, prompt: string): Promise<boolean> {
@@ -523,7 +560,6 @@ function delay(ms: number): Promise<void> {
 async function animateCoin(api: Api, wheel: Wheel, name: string): Promise<void> {
   const title = `<b>Coin flip</b> by ${name}`;
   const side = flipCoin();
-  await editPanel(api, wheel, title);
   const flipping = await sendCoinSticker(api, wheel.chatId, side, true).catch((error: unknown) => {
     console.error("Failed to send coin sticker:", error);
     return null;
@@ -532,6 +568,7 @@ async function animateCoin(api: Api, wheel: Wheel, name: string): Promise<void> 
     await editPanel(api, wheel, `${title}\nResult: <b>${side}</b>`);
     return;
   }
+  await deletePanel(api, wheel);
 
   await delay(COIN_ANIMATION_MS);
   const landed = await sendCoinSticker(api, wheel.chatId, side, false).catch(() => null);
@@ -547,11 +584,12 @@ async function animateCoin(api: Api, wheel: Wheel, name: string): Promise<void> 
 }
 
 async function rollDice(api: Api, wheel: Wheel, name: string): Promise<void> {
-  await editPanel(api, wheel, `<b>Dice</b> rolled by ${name}`);
   const dice = await api.sendDice(wheel.chatId, DICE_EMOJI).catch(() => null);
   if (!dice) {
+    await editPanel(api, wheel, "Couldn't roll the dice. Please try again.");
     return;
   }
+  await deletePanel(api, wheel);
   await delay(DICE_ANIMATION_MS);
   await api
     .sendMessage(wheel.chatId, `${name} rolled a <b>${dice.dice.value}</b>.`, {

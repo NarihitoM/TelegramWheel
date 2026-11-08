@@ -60,7 +60,11 @@ export function sendCoinSticker(
   );
 }
 
-export async function showLoading(api: Api, chatId: number, name: AnimationName): Promise<() => Promise<void>> {
+export async function showLoading(
+  api: Api,
+  chatId: number,
+  name: AnimationName,
+): Promise<(() => Promise<void>) | null> {
   const sent = await sendAsset(
     `${name}.tgs`,
     (file) => api.sendSticker(chatId, file),
@@ -69,9 +73,10 @@ export async function showLoading(api: Api, chatId: number, name: AnimationName)
     console.error(`Failed to send ${name} sticker:`, error);
     return null;
   });
+  if (!sent) {
+    return null;
+  }
   return async () => {
-    if (sent) {
-      await api.deleteMessage(chatId, sent.message_id).catch(() => undefined);
-    }
+    await api.deleteMessage(chatId, sent.message_id).catch(() => undefined);
   };
 }

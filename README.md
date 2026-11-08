@@ -50,7 +50,7 @@ Bot:  posts the result as text and as an image
 
 - Pick a winner works the same way up to Start, then asks "How many winners?" (1 up to one less than the member count) and posts the winners as text and as an image, then sends an animated party popper.
 - Coin flip and Dice are one tap. Coin flip sends an animated coin sticker that lands on the result, swaps it for a still coin once it lands (so it stops moving), then replies with "Name flipped Heads." Dice sends Telegram's animated dice and, once it stops, replies with "Name rolled a 4."
-- While the bot works, the panel keeps the chosen options, adds "Fetching members list...", "Spinning..." or "Picking..." and shows an animated sticker under it (spinning dots or a turning wheel). The panel and sticker are removed only after the result is posted.
+- While the bot works, only one bot message is shown: the panel is swapped for an animated sticker (spinning dots while fetching members, a turning wheel while spinning or picking). The sticker is removed when the result is posted. If the sticker cannot be sent, the panel stays and shows "Fetching members list...", "Spinning..." or "Picking..." instead.
 - Buttons only offer choices that fit the member count. When only one size fits, the bot skips that question.
 - Anyone in the chat can send `/wheel` and choose from the menu. Whoever chooses Split into groups or Pick a winner becomes the starter. Each chat has a 10 second cooldown between wheels.
 - Anyone can tap Join or Leave. Only the starter can press Start, Spin and the number buttons.
