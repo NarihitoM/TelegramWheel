@@ -119,17 +119,18 @@ async function collectMembers(api: Api, chatId: number, owner: Member): Promise<
 }
 
 async function openWheel(api: Api, chatId: number, owner: Member): Promise<Wheel | null> {
-  const members = await collectMembers(api, chatId, owner);
-  const wheel = await createWheel(chatId, owner, members);
-  const panel = await api
-    .sendMessage(chatId, joinText(wheel), { parse_mode: "HTML", reply_markup: joinKeyboard(wheel.id) })
-    .catch(() => null);
+  const panel = await api.sendMessage(chatId, "Fetching members list...").catch(() => null);
   if (!panel) {
-    await moveWheel(wheel.id, OPEN_STEPS, { step: "cancelled" });
     return null;
   }
-  await setWheelMessage(wheel.id, panel.message_id);
-  return { ...wheel, messageId: panel.message_id };
+
+  const members = await collectMembers(api, chatId, owner);
+  const created = await createWheel(chatId, owner, members);
+  await setWheelMessage(created.id, panel.message_id);
+
+  const wheel = { ...created, messageId: panel.message_id };
+  await showJoin(api, wheel);
+  return wheel;
 }
 
 async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
