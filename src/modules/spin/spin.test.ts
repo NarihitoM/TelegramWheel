@@ -230,16 +230,25 @@ describe("describeSplit", () => {
 });
 
 describe("describeManagers", () => {
-  it("lists the starter and admins without repeats", () => {
-    assert.equal(describeManagers("Narihito", []), "Narihito");
-    assert.equal(describeManagers("Narihito", ["Narihito"]), "Narihito");
-    assert.equal(describeManagers("Mya", ["Narihito", "Aung"]), "Mya, Narihito or Aung");
+  const owner = { id: "1", name: "Narihito", role: "Owner" } as const;
+  const admin = { id: "2", name: "Aung", role: "Admin" } as const;
+
+  it("puts the role in front of each name", () => {
+    assert.equal(describeManagers({ id: "9", name: "Mya" }, []), "Starter Mya");
+    assert.equal(describeManagers({ id: "9", name: "Mya" }, [admin, owner]), "Starter Mya, Owner Narihito or Admin Aung");
+  });
+
+  it("uses the chat role when the starter is the owner or an admin", () => {
+    assert.equal(describeManagers({ id: "1", name: "Narihito" }, [owner, admin]), "Owner Narihito or Admin Aung");
+    assert.equal(describeManagers({ id: "2", name: "Aung" }, [owner, admin]), "Admin Aung or Owner Narihito");
   });
 
   it("caps long admin lists", () => {
-    const admins = ["A", "B", "C", "D", "E", "F"];
-    assert.equal(describeManagers("Owner", admins), "Owner, A, B, C, D or 2 other admins");
-    assert.equal(describeManagers("Owner", admins.slice(0, 5)), "Owner, A, B, C, D or 1 other admin");
+    const admins = ["A", "B", "C", "D", "E", "F"].map((name, index) => ({ id: String(index + 10), name, role: "Admin" as const }));
+    assert.equal(
+      describeManagers({ id: "9", name: "Mya" }, admins),
+      "Starter Mya, Admin A, Admin B, Admin C, Admin D or 2 other admins",
+    );
   });
 });
 

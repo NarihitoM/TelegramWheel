@@ -101,8 +101,14 @@ async function editPanel(api: Api, wheel: Wheel, text: string, keyboard?: Inline
 
 async function managersOf(api: Api, wheel: Wheel): Promise<string> {
   const admins = await api.getChatAdministrators(wheel.chatId).catch(() => []);
-  const names = admins.filter((admin) => !admin.user.is_bot).map((admin) => toMember(admin.user).name);
-  return describeManagers(wheel.ownerName, names);
+  const managers = admins
+    .filter((admin) => !admin.user.is_bot)
+    .map((admin) => ({
+      id: String(admin.user.id),
+      name: toMember(admin.user).name,
+      role: admin.status === "creator" ? ("Owner" as const) : ("Admin" as const),
+    }));
+  return describeManagers({ id: String(wheel.ownerId), name: wheel.ownerName }, managers);
 }
 
 function alertText(text: string): string {

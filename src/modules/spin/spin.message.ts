@@ -100,13 +100,25 @@ export function chunkLines(lines: string[], maxLength: number): string[] {
 
 const MAX_MANAGER_NAMES = 5;
 
-export function describeManagers(ownerName: string, adminNames: string[]): string {
-  const names = [...new Set([ownerName, ...adminNames])];
-  const shown = names.slice(0, MAX_MANAGER_NAMES);
-  const hidden = names.length - shown.length;
+export type ManagerRole = "Owner" | "Admin";
+
+export interface ChatManager {
+  id: string;
+  name: string;
+  role: ManagerRole;
+}
+
+export function describeManagers(starter: { id: string; name: string }, admins: ChatManager[]): string {
+  const starterRole = admins.find((admin) => admin.id === starter.id)?.role ?? "Starter";
+  const others = admins
+    .filter((admin) => admin.id !== starter.id)
+    .sort((a, b) => Number(b.role === "Owner") - Number(a.role === "Owner"));
+  const labels = [`${starterRole} ${starter.name}`, ...others.map((admin) => `${admin.role} ${admin.name}`)];
+  const shown = labels.slice(0, MAX_MANAGER_NAMES);
+  const hidden = labels.length - shown.length;
   if (hidden > 0) {
     return `${shown.join(", ")} or ${plural(hidden, "other admin")}`;
   }
-  const last = shown.pop() ?? ownerName;
+  const last = shown.pop() ?? labels[0] ?? starter.name;
   return shown.length > 0 ? `${shown.join(", ")} or ${last}` : last;
 }
