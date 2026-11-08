@@ -13,12 +13,14 @@ interface FontSource {
   pattern?: RegExp;
 }
 
+const SYMBOL_PATTERN = /[\u2000-\u2BFF\u{1F000}-\u{1F2FF}\u{1F650}-\u{1F67F}\u{1F780}-\u{1F8FF}\u{1FB00}-\u{1FBFF}]/u;
+
 const SOURCES: FontSource[] = [
   { family: "Noto Sans", weights: [400, 700] },
   { family: "Noto Sans Myanmar", weights: [400, 700], pattern: /[\u1000-\u109F\uA9E0-\uA9FF\uAA60-\uAA7F]/u },
   { family: "Noto Sans Math", weights: [400], pattern: /[\u2100-\u214F\u{1D400}-\u{1D7FF}]/u },
-  { family: "Noto Sans Symbols", weights: [400], pattern: /[\u2190-\u2BFF\u{1F100}-\u{1F1FF}]/u },
-  { family: "Noto Sans Symbols 2", weights: [400], pattern: /[\u2190-\u2BFF\u{1F100}-\u{1F1FF}]/u },
+  { family: "Noto Sans Symbols", weights: [400], pattern: SYMBOL_PATTERN },
+  { family: "Noto Sans Symbols 2", weights: [400], pattern: SYMBOL_PATTERN },
   { family: "Noto Sans Javanese", weights: [400], pattern: /[\uA980-\uA9DF]/u },
 ];
 
