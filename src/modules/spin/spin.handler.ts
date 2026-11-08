@@ -2,7 +2,7 @@ import { Composer, GrammyError, InputFile, InputMediaBuilder, type Api, type Con
 import type { User } from "grammy/types";
 import { prisma } from "../../shared/lib/prisma.js";
 import { claimWheelCooldown, isGroupChat, listActiveChannels, saveChat } from "../chat/chat.service.js";
-import { listKnownMembers, rememberMembers, scanChatMembers, syncAdmins, toMember } from "../members/members.service.js";
+import { listKnownMembers, loadChatMembers, rememberMembers, syncAdmins, toMember } from "../members/members.service.js";
 import { COIN_ANIMATION_MS, sendCoinSticker, showLoading, type AnimationName } from "./spin.animation.js";
 import { renderResultImages, renderWinnersImage } from "./spin.image.js";
 import {
@@ -159,7 +159,7 @@ async function closeWheel(api: Api, wheel: Wheel, text: string): Promise<void> {
 }
 
 async function collectMembers(api: Api, chatId: number, owner: Member): Promise<Member[]> {
-  let members = await scanChatMembers(chatId);
+  let members = await loadChatMembers(chatId);
   if (!members) {
     await syncAdmins(api, chatId);
     members = await listKnownMembers(chatId);

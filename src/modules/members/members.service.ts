@@ -3,6 +3,7 @@ import type { Api } from "grammy";
 import type { User } from "grammy/types";
 import { isMtprotoEnabled, withBotClient } from "../../shared/lib/mtproto.js";
 import { prisma } from "../../shared/lib/prisma.js";
+import { cacheDelete, cacheGet, cacheSet } from "../../shared/lib/redis.js";
 import type { Member } from "../spin/spin.types.js";
 
 export function toMember(user: User): Member {
@@ -68,8 +69,49 @@ export async function syncAdmins(api: Api, chatId: number): Promise<void> {
 }
 
 const SCAN_LIMIT = 10000;
+const MEMBERS_CACHE_TTL_SECONDS = 10 * 60;
 
-export async function scanChatMembers(chatId: number): Promise<Member[] | null> {
+function membersCacheKey(chatId: number): string {
+  return `members:${chatId}`;
+}
+
+function isMember(value: unknown): value is Member {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const { id, name, username } = value as Record<string, unknown>;
+  return typeof id === "string" && typeof name === "string" && (username === undefined || typeof username === "string");
+}
+
+export function parseCachedMembers(raw: string): Member[] | null {
+  try {
+    const value: unknown = JSON.parse(raw);
+    return Array.isArray(value) && value.every(isMember) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearCachedMembers(chatId: number): Promise<void> {
+  await cacheDelete(membersCacheKey(chatId));
+}
+
+export async function loadChatMembers(chatId: number): Promise<Member[] | null> {
+  const key = membersCacheKey(chatId);
+  const cached = await cacheGet(key);
+  const members = cached ? parseCachedMembers(cached) : null;
+  if (members) {
+    return members;
+  }
+
+  const scanned = await scanChatMembers(chatId);
+  if (scanned) {
+    await cacheSet(key, JSON.stringify(scanned), MEMBERS_CACHE_TTL_SECONDS);
+  }
+  return scanned;
+}
+
+async function scanChatMembers(chatId: number): Promise<Member[] | null> {
   if (!isMtprotoEnabled()) {
     return null;
   }

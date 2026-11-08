@@ -1,7 +1,7 @@
 import { Composer, type Context } from "grammy";
-import type { Chat, User } from "grammy/types";
+import type { Chat, ChatMember, User } from "grammy/types";
 import { isGroupChat, saveChat } from "../chat/chat.service.js";
-import { forgetMember, rememberMembers } from "./members.service.js";
+import { clearCachedMembers, forgetMember, rememberMembers } from "./members.service.js";
 
 type GroupChat = Exclude<Chat, Chat.PrivateChat>;
 
@@ -11,6 +11,15 @@ async function remember(chat: GroupChat, users: User[]): Promise<void> {
     await saveChat(chat);
     await rememberMembers(chat.id, users);
   }
+}
+
+function isInside(member: ChatMember): boolean {
+  return (
+    member.status === "creator" ||
+    member.status === "administrator" ||
+    member.status === "member" ||
+    (member.status === "restricted" && member.is_member)
+  );
 }
 
 export const membersHandler = new Composer<Context>();
@@ -27,6 +36,9 @@ membersHandler.on("message", async (ctx, next) => {
       if (message.left_chat_member) {
         await forgetMember(chat.id, message.left_chat_member.id);
       }
+      if (message.left_chat_member || (message.new_chat_members?.length ?? 0) > 0) {
+        await clearCachedMembers(chat.id);
+      }
     } catch (error) {
       console.error("Failed to track members:", error);
     }
@@ -40,15 +52,14 @@ membersHandler.on("chat_member", async (ctx) => {
     return;
   }
 
-  const stillInside =
-    member.status === "creator" ||
-    member.status === "administrator" ||
-    member.status === "member" ||
-    (member.status === "restricted" && member.is_member);
+  const stillInside = isInside(member);
 
   if (stillInside) {
     await remember(chat, [member.user]);
   } else {
     await forgetMember(chat.id, member.user.id);
+  }
+  if (stillInside !== isInside(ctx.chatMember.old_chat_member)) {
+    await clearCachedMembers(chat.id);
   }
 });
