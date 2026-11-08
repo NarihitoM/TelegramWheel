@@ -133,7 +133,7 @@ prisma/schema/                  Database schema, one file per area, plus migrati
 
 - The image shows up to 15 names per group. The text message always has the full list.
 - The join panel lists up to 40 names and shows the rest as a count.
-- Image fonts (Noto Sans, Myanmar, Math, Symbols, Javanese) are loaded from Google Fonts per image, so styled names like 𝓝𝓪𝓻𝓲 or ⓃⒶⓇⒾ render. Other scripts (Thai, CJK, Arabic and more) and emoji are loaded automatically by @vercel/og.
+- Image fonts are loaded from Google Fonts per image, only for the characters that appear: Latin, Myanmar, math and styled letters (𝓝𝓪𝓻𝓲, ⓃⒶⓇⒾ), symbols and playing cards, music, and about 30 other scripts (Canadian syllabics, Cherokee, Ethiopic, Runic, Georgian, Armenian, Khmer, Lao, Tibetan and more). Thai, CJK, Arabic, Indic scripts and emoji are loaded by @vercel/og. Characters that no font covers still show as a box.
 
 ## CI/CD
 
