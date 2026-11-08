@@ -33,7 +33,7 @@ Bot:  posts the result as text and as an image
 - Anyone in the chat can start a wheel. Each chat has a 10 second cooldown between wheels.
 - Anyone can tap Join or Leave. Only the starter can press Start, Spin and the number buttons.
 - One wheel runs per chat. Tap **Exit** to close it: the starter or an admin can exit any time, and anyone can exit after 1 minute of no activity. Wheels with no activity for 10 minutes stop blocking new ones.
-- `/start` explains how to use the bot. `/credit` shows who made it. `/donate` shows KBZPay/Wave details from env variables, so phone numbers never go into the code.
+- `/start` explains how to use the bot. `/credit` shows who made it. `/donate` shows KPay details from env variables, so phone numbers never go into the code.
 
 ### Who is in the list
 
@@ -71,8 +71,7 @@ Fill in `.env`:
 | `TG_API_ID` | Optional. App api_id from my.telegram.org, enables the full member scan |
 | `TG_API_HASH` | Optional. App api_hash from my.telegram.org |
 | `DONATE_NAME` | Optional. Account name shown by `/donate` |
-| `DONATE_KBZPAY` | Optional. KBZPay number shown by `/donate` |
-| `DONATE_WAVE` | Optional. Wave number shown by `/donate` |
+| `DONATE_KBZPAY` | Optional. KPay number shown by `/donate` |
 
 ### 3. Create the database tables
 

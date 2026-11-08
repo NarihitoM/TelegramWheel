@@ -9,12 +9,7 @@ const CREDIT_MESSAGE = [
 ].join("\n");
 
 function donateMessage(): string {
-  const accounts = [
-    env.donateKbzPay ? `KBZPay: ${env.donateKbzPay}` : "",
-    env.donateWave ? `Wave: ${env.donateWave}` : "",
-  ].filter(Boolean);
-
-  if (accounts.length === 0) {
+  if (!env.donateKbzPay) {
     return "Donations are not set up yet. Thanks for wanting to support the bot!";
   }
 
@@ -22,7 +17,7 @@ function donateMessage(): string {
     "Support Spin Wheel Bot",
     "Every donation helps keep the bot running. Thank you!",
     "",
-    ...accounts,
+    `KPay: ${env.donateKbzPay}`,
     ...(env.donateName ? [`Name: ${env.donateName}`] : []),
   ].join("\n");
 }

@@ -33,7 +33,4 @@ export const env = {
   get donateKbzPay() {
     return process.env.DONATE_KBZPAY || null;
   },
-  get donateWave() {
-    return process.env.DONATE_WAVE || null;
-  },
 };
