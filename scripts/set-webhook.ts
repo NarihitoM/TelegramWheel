@@ -1,5 +1,5 @@
 import { Api, GrammyError } from "grammy";
-import { ALLOWED_UPDATES, BOT_COMMANDS } from "../src/bot.js";
+import { ALLOWED_UPDATES, BOT_COMMANDS, BOT_DESCRIPTION, BOT_SHORT_DESCRIPTION } from "../src/bot.js";
 import { env } from "../src/shared/config/env.js";
 
 process.loadEnvFile();
@@ -14,6 +14,8 @@ try {
     drop_pending_updates: true,
   });
   await api.setMyCommands(BOT_COMMANDS);
+  await api.setMyDescription(BOT_DESCRIPTION);
+  await api.setMyShortDescription(BOT_SHORT_DESCRIPTION);
 } catch (error) {
   if (error instanceof GrammyError) {
     console.error(`Telegram rejected the request: ${error.description}`);

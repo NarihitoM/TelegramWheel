@@ -12,6 +12,22 @@ export const BOT_COMMANDS = [
   { command: "credit", description: "Who made this bot" },
 ];
 
+export const BOT_DESCRIPTION = [
+  "Spin Wheel Bot randomly splits group members into teams.",
+  "",
+  "How to use:",
+  "1. Add the bot to a group and make it an admin.",
+  "2. Send /wheel. All members are added automatically.",
+  "3. Pick the number of groups and members per group.",
+  "4. Tap Spin to get the result as text and an image.",
+  "",
+  "Leftover members go into an extra group, so nobody is left out.",
+  "",
+  "Made by Narihito - github.com/NarihitoM",
+].join("\n");
+
+export const BOT_SHORT_DESCRIPTION = "Randomly split group members into teams with /wheel. Made by Narihito.";
+
 export const ALLOWED_UPDATES = ["message", "callback_query", "my_chat_member", "chat_member"] as const;
 
 export function createBot(): Bot {

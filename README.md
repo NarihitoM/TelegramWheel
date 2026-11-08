@@ -109,7 +109,7 @@ To go back to local development, run `npm run dev` (it deletes the webhook). Run
 | `npm run dev` | Run the bot locally with long polling |
 | `npm test` | Run unit tests |
 | `npm run typecheck` | Type-check the project |
-| `npm run webhook:set` | Set the Telegram webhook and bot commands |
+| `npm run webhook:set` | Set the Telegram webhook, bot commands, description and about text |
 | `npm run db:migrate` | Create and apply a migration in development |
 | `npm run db:deploy` | Apply migrations in production |
 
