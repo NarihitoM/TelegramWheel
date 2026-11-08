@@ -2,7 +2,7 @@ import { Composer, type Context } from "grammy";
 
 export const START_MESSAGE = [
   "<b>Spin Wheel Bot</b>",
-  "Randomly split the members of a group or channel into teams.",
+  "Randomly split the members of a group or channel into groups.",
   "",
   "<b>How to use</b>",
   "1. Add the bot to the group or channel and make it an admin.",
