@@ -61,6 +61,9 @@ const DICE_EMOJI = "\u{1F3B2}";
 const CELEBRATION_EMOJI = "\u{1F389}";
 const DICE_ANIMATION_MS = 4_000;
 const MIN_LOADING_MS = 2_000;
+const CHAT_ACTION_INTERVAL_MS = 4_000;
+
+type ChatAction = "typing" | "upload_photo";
 const MAX_AVATARS = 200;
 const PREFETCH_AVATARS_MS = 15_000;
 const RESULT_AVATARS_MS = 5_000;
@@ -195,14 +198,39 @@ interface Loading {
   stop: () => Promise<void>;
 }
 
+function keepTyping(api: Api, chatId: number, action: ChatAction = "typing"): () => void {
+  const send = () => {
+    api.sendChatAction(chatId, action).catch(() => undefined);
+  };
+  send();
+  const timer = setInterval(send, CHAT_ACTION_INTERVAL_MS);
+  return () => clearInterval(timer);
+}
+
+async function whileTyping<T>(api: Api, chatId: number, task: () => Promise<T>, action?: ChatAction): Promise<T> {
+  const stopTyping = keepTyping(api, chatId, action);
+  try {
+    return await task();
+  } finally {
+    stopTyping();
+  }
+}
+
 async function startLoading(api: Api, wheel: Wheel, name: AnimationName, status: string): Promise<Loading> {
+  const stopTyping = keepTyping(api, wheel.chatId);
   const stop = await showLoading(api, wheel.chatId, name);
   if (stop) {
     await deletePanel(api, wheel);
-    return { panelHidden: true, stop };
+    return {
+      panelHidden: true,
+      stop: async () => {
+        stopTyping();
+        await stop();
+      },
+    };
   }
   await editPanel(api, wheel, status);
-  return { panelHidden: false, stop: async () => undefined };
+  return { panelHidden: false, stop: async () => stopTyping() };
 }
 
 async function openWheel(api: Api, menu: Wheel, owner: Member, mode: WheelMode): Promise<void> {
@@ -330,9 +358,13 @@ async function postWinners(api: Api, wheel: Wheel, count: number): Promise<void>
   }
 
   if (picture) {
-    await api
-      .sendPhoto(wheel.chatId, new InputFile(picture, "winners.png"), { caption: count === 1 ? "Winner" : "Winners" })
-      .catch((error: unknown) => console.error("Failed to send winners image:", error));
+    const caption = count === 1 ? "Winner" : "Winners";
+    await whileTyping(
+      api,
+      wheel.chatId,
+      () => api.sendPhoto(wheel.chatId, new InputFile(picture, "winners.png"), { caption }),
+      "upload_photo",
+    ).catch((error: unknown) => console.error("Failed to send winners image:", error));
   }
   await api.sendMessage(wheel.chatId, CELEBRATION_EMOJI).catch(() => undefined);
 }
@@ -418,9 +450,11 @@ async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
     return;
   }
 
-  await postResultImages(ctx.api, wheel.chatId, images).catch((error: unknown) => {
-    console.error("Failed to send result images:", error);
-  });
+  await whileTyping(ctx.api, wheel.chatId, () => postResultImages(ctx.api, wheel.chatId, images), "upload_photo").catch(
+    (error: unknown) => {
+      console.error("Failed to send result images:", error);
+    },
+  );
 }
 
 async function askCustomNumber(ctx: Context, wheel: Wheel, prompt: string): Promise<boolean> {
@@ -588,7 +622,7 @@ async function animateCoin(api: Api, wheel: Wheel, name: string): Promise<void> 
   }
   await deletePanel(api, wheel);
 
-  await delay(COIN_ANIMATION_MS);
+  await whileTyping(api, wheel.chatId, () => delay(COIN_ANIMATION_MS));
   const landed = await sendCoinSticker(api, wheel.chatId, side, false).catch(() => null);
   if (landed) {
     await api.deleteMessage(wheel.chatId, flipping.message_id).catch(() => undefined);
@@ -608,7 +642,7 @@ async function rollDice(api: Api, wheel: Wheel, name: string): Promise<void> {
     return;
   }
   await deletePanel(api, wheel);
-  await delay(DICE_ANIMATION_MS);
+  await whileTyping(api, wheel.chatId, () => delay(DICE_ANIMATION_MS));
   await api
     .sendMessage(wheel.chatId, `${name} rolled a <b>${dice.dice.value}</b>.`, {
       parse_mode: "HTML",
