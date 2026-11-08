@@ -124,9 +124,17 @@ async function openWheel(api: Api, chatId: number, owner: Member): Promise<Wheel
     return null;
   }
 
-  const members = await collectMembers(api, chatId, owner);
-  const created = await createWheel(chatId, owner, members);
-  await setWheelMessage(created.id, panel.message_id);
+  let created: Wheel;
+  try {
+    const members = await collectMembers(api, chatId, owner);
+    created = await createWheel(chatId, owner, members);
+    await setWheelMessage(created.id, panel.message_id);
+  } catch (error) {
+    await api
+      .editMessageText(chatId, panel.message_id, "Couldn't fetch the members list. Please try again.")
+      .catch(() => undefined);
+    throw error;
+  }
 
   const wheel = { ...created, messageId: panel.message_id };
   await showJoin(api, wheel);
