@@ -182,32 +182,29 @@ async function deletePanel(api: Api, wheel: Wheel): Promise<void> {
 }
 
 async function openWheel(api: Api, menu: Wheel, owner: Member, mode: WheelMode): Promise<void> {
-  const { chatId } = menu;
-  await deletePanel(api, menu);
-  const stopLoading = await showLoading(api, chatId, "loading", "<b>Fetching members list...</b>");
+  const { chatId, messageId } = menu;
+  if (messageId === null) {
+    return;
+  }
+  await editPanel(api, menu, "Fetching members list...");
+  const stopLoading = await showLoading(api, chatId, "loading");
 
   try {
     const members = await collectMembers(api, chatId, owner);
     const created = await createWheel(chatId, owner, members, { mode });
-    const panel = await api
-      .sendMessage(chatId, joinText(created), { parse_mode: "HTML", reply_markup: joinKeyboard(created.id) })
-      .catch(() => null);
-    if (panel) {
-      await setWheelMessage(created.id, panel.message_id);
-    } else {
-      await moveWheel(created.id, OPEN_STEPS, { step: "cancelled" });
-    }
+    await setWheelMessage(created.id, messageId);
+    await showJoin(api, { ...created, messageId });
   } catch (error) {
-    await api.sendMessage(chatId, "Couldn't fetch the members list. Please try again.").catch(() => undefined);
+    await editPanel(api, menu, "Couldn't fetch the members list. Please try again.");
     throw error;
   } finally {
     await stopLoading();
   }
 }
 
-async function postFailure(api: Api, chatId: number, error: unknown): Promise<void> {
+async function postFailure(api: Api, wheel: Wheel, error: unknown): Promise<void> {
   const reason = error instanceof GrammyError ? error.description : "unknown error";
-  await api.sendMessage(chatId, `Couldn't post the result: ${escapeHtml(reason)}`, { parse_mode: "HTML" }).catch(() => undefined);
+  await editPanel(api, wheel, `Couldn't post the result: ${escapeHtml(reason)}`);
 }
 
 async function postText(
@@ -241,8 +238,8 @@ async function postWinners(api: Api, wheel: Wheel, count: number): Promise<void>
     return;
   }
 
-  await deletePanel(api, wheel);
-  const stopLoading = await showLoading(api, wheel.chatId, "wheel", "<b>Picking...</b>");
+  await editPanel(api, wheel, "Picking...");
+  const stopLoading = await showLoading(api, wheel.chatId, "wheel");
   const title = await chatTitle(wheel.chatId);
   const winners = pickWinners(wheel.members, count);
 
@@ -268,10 +265,12 @@ async function postWinners(api: Api, wheel: Wheel, count: number): Promise<void>
       count === 1 ? "Winner" : "Winners",
     );
   } catch (error) {
-    await postFailure(api, wheel.chatId, error);
-  } finally {
     await stopLoading();
+    await postFailure(api, wheel, error);
+    return;
   }
+  await stopLoading();
+  await deletePanel(api, wheel);
 }
 
 async function postResultImages(api: Api, chatId: number, images: Buffer[]): Promise<void> {
@@ -310,8 +309,8 @@ async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
     return;
   }
 
-  await deletePanel(ctx.api, wheel);
-  const stopLoading = await showLoading(ctx.api, wheel.chatId, "wheel", "<b>Spinning...</b>");
+  await editPanel(ctx.api, wheel, "Spinning...");
+  const stopLoading = await showLoading(ctx.api, wheel.chatId, "wheel");
   const title = await chatTitle(wheel.chatId);
   const result = splitIntoTeams(wheel.members, teamCount, teamSize);
 
@@ -337,7 +336,7 @@ async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
     );
   } catch (error) {
     await stopLoading();
-    await postFailure(ctx.api, wheel.chatId, error);
+    await postFailure(ctx.api, wheel, error);
     return;
   }
 
@@ -349,6 +348,7 @@ async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
     console.error("Failed to send result images:", error);
   });
   await stopLoading();
+  await deletePanel(ctx.api, wheel);
 }
 
 async function askCustomNumber(ctx: Context, wheel: Wheel, prompt: string): Promise<boolean> {

@@ -60,27 +60,13 @@ export function sendCoinSticker(
   );
 }
 
-export function sendAnimation(
-  api: Api,
-  chatId: number,
-  name: AnimationName,
-  caption: string,
-): Promise<Message.AnimationMessage> {
-  return sendAsset(
-    `${name}.gif`,
-    (file) => api.sendAnimation(chatId, file, { caption, parse_mode: "HTML" }),
-    (message) => message.animation.file_id,
-  );
-}
-
-export async function showLoading(
-  api: Api,
-  chatId: number,
-  name: AnimationName,
-  caption: string,
-): Promise<() => Promise<void>> {
-  const sent = await sendAnimation(api, chatId, name, caption).catch((error: unknown) => {
-    console.error(`Failed to send ${name} animation:`, error);
+export async function showLoading(api: Api, chatId: number, name: AnimationName): Promise<() => Promise<void>> {
+  const sent = await sendAsset(
+    `${name}.tgs`,
+    (file) => api.sendSticker(chatId, file),
+    (message) => message.sticker.file_id,
+  ).catch((error: unknown) => {
+    console.error(`Failed to send ${name} sticker:`, error);
     return null;
   });
   return async () => {
