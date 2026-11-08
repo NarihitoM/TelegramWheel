@@ -19,7 +19,7 @@ export const START_MESSAGE = [
   "- Anyone in the chat can send /wheel and choose from the menu.",
   "- Whoever chooses Split into groups or Pick a winner becomes the starter.",
   "- Only the starter can press Start, Spin and the number buttons.",
-  "- The starter or an admin can tap <b>Remove</b> to take out people who are offline.",
+  "- The starter or an admin can tap <b>Add/Remove</b> to take out people who are offline or add people back.",
   "- One wheel runs per chat. Tap <b>Exit</b> to close it so someone else can start.",
   "- The starter or an admin can exit any time. Anyone can exit after 1 minute of no activity.",
   "- Wait 10 seconds between wheels in the same chat.",

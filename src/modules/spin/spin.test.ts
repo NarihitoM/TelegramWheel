@@ -3,17 +3,17 @@ import { describe, it } from "node:test";
 import {
   decodeCallback,
   decodePickChat,
-  decodeRemove,
+  decodeManage,
   encodeCallback,
   encodePickChat,
-  encodeRemove,
+  encodeManage,
   groupCountOptions,
   groupSizeOptions,
   hasCustomGroupCount,
   hasCustomGroupSize,
   hasCustomWinnerCount,
-  removeKeyboard,
-  removePageCount,
+  manageKeyboard,
+  managePageCount,
   winnerCountOptions,
 } from "./spin.keyboard.js";
 import { toVisualOrder } from "./spin.fonts.js";
@@ -124,23 +124,28 @@ describe("keyboard options", () => {
   });
 });
 
-describe("remove list", () => {
-  it("round-trips remove buttons within the 64 byte limit", () => {
-    const remove = { wheelId: 2147483647, kind: "remove", userId: 9999999999, page: 12 } as const;
-    assert.ok(encodeRemove(remove).length <= 64);
-    assert.deepEqual(decodeRemove(encodeRemove(remove)), remove);
-    assert.deepEqual(decodeRemove(encodeRemove({ wheelId: 3, kind: "page", page: 1 })), { wheelId: 3, kind: "page", page: 1 });
-    assert.deepEqual(decodeRemove(encodeRemove({ wheelId: 3, kind: "back" })), { wheelId: 3, kind: "back" });
-    assert.equal(decodeRemove("r:abc:b"), null);
-    assert.equal(decodeRemove("w:1:x:2:0"), null);
+describe("add and remove list", () => {
+  it("round-trips list buttons within the 64 byte limit", () => {
+    const pick = { wheelId: 2147483647, kind: "pick", mode: "remove", userId: 9999999999, page: 12 } as const;
+    assert.ok(encodeManage(pick).length <= 64);
+    assert.deepEqual(decodeManage(encodeManage(pick)), pick);
+    const add = { wheelId: 5, kind: "pick", mode: "add", userId: 42, page: 0 } as const;
+    assert.deepEqual(decodeManage(encodeManage(add)), add);
+    const page = { wheelId: 3, kind: "page", mode: "add", page: 1 } as const;
+    assert.deepEqual(decodeManage(encodeManage(page)), page);
+    assert.deepEqual(decodeManage(encodeManage({ wheelId: 3, kind: "back" })), { wheelId: 3, kind: "back" });
+    assert.equal(decodeManage("r:abc:b"), null);
+    assert.equal(decodeManage("w:1:x:2:0"), null);
   });
 
-  it("pages the member list", () => {
-    assert.equal(removePageCount(0), 1);
-    assert.equal(removePageCount(8), 1);
-    assert.equal(removePageCount(9), 2);
-    const labels = removeKeyboard(1, makeMembers(10), 1).inline_keyboard.flat().map((button) => button.text);
-    assert.deepEqual(labels, ["Remove User 9", "Remove User 10", "Previous", "Back"]);
+  it("pages the list and switches between add and remove", () => {
+    assert.equal(managePageCount(0), 1);
+    assert.equal(managePageCount(8), 1);
+    assert.equal(managePageCount(9), 2);
+    const labels = manageKeyboard(1, "remove", makeMembers(10), 1).inline_keyboard.flat().map((button) => button.text);
+    assert.deepEqual(labels, ["Remove User 9", "Remove User 10", "Previous", "Add people", "Back"]);
+    const addLabels = manageKeyboard(1, "add", makeMembers(1), 0).inline_keyboard.flat().map((button) => button.text);
+    assert.deepEqual(addLabels, ["Add User 1", "Remove people", "Back"]);
   });
 });
 

@@ -138,7 +138,7 @@ export function joinKeyboard(wheelId: number): InlineKeyboard {
     .text("Leave", encodeCallback({ wheelId, action: "l" }))
     .row()
     .text("Start", encodeCallback({ wheelId, action: "start" }))
-    .text("Remove", encodeCallback({ wheelId, action: "rm" }))
+    .text("Add/Remove", encodeCallback({ wheelId, action: "rm" }))
     .text("Exit", encodeCallback({ wheelId, action: "x" }));
 }
 
@@ -184,67 +184,89 @@ export function pickChatKeyboard(chats: { id: number; title: string }[]): Inline
   return keyboard;
 }
 
-export const REMOVE_PAGE_SIZE = 8;
-const MAX_REMOVE_LABEL = 40;
+export const MANAGE_PAGE_SIZE = 8;
+const MAX_MANAGE_LABEL = 40;
 
-export type RemoveCallback =
-  | { wheelId: number; kind: "page"; page: number }
-  | { wheelId: number; kind: "remove"; userId: number; page: number }
+export type ManageMode = "add" | "remove";
+
+export type ManageCallback =
+  | { wheelId: number; kind: "page"; mode: ManageMode; page: number }
+  | { wheelId: number; kind: "pick"; mode: ManageMode; userId: number; page: number }
   | { wheelId: number; kind: "back" };
 
-export function encodeRemove(callback: RemoveCallback): string {
+const PAGE_CODES: Record<ManageMode, string> = { remove: "p", add: "a" };
+const PICK_CODES: Record<ManageMode, string> = { remove: "x", add: "y" };
+
+export function encodeManage(callback: ManageCallback): string {
   switch (callback.kind) {
     case "page":
-      return `r:${callback.wheelId}:p:${callback.page}`;
-    case "remove":
-      return `r:${callback.wheelId}:x:${callback.userId}:${callback.page}`;
+      return `r:${callback.wheelId}:${PAGE_CODES[callback.mode]}:${callback.page}`;
+    case "pick":
+      return `r:${callback.wheelId}:${PICK_CODES[callback.mode]}:${callback.userId}:${callback.page}`;
     case "back":
       return `r:${callback.wheelId}:b`;
   }
 }
 
-export function decodeRemove(data: string): RemoveCallback | null {
-  const [prefix, rawId, kind, first, second] = data.split(":");
+export function decodeManage(data: string): ManageCallback | null {
+  const [prefix, rawId, code, first, second] = data.split(":");
   const wheelId = Number(rawId);
   if (prefix !== "r" || !Number.isInteger(wheelId)) {
     return null;
   }
-  if (kind === "b") {
+  if (code === "b") {
     return { wheelId, kind: "back" };
   }
-  if (kind === "p" && Number.isInteger(Number(first))) {
-    return { wheelId, kind: "page", page: Number(first) };
+  const page = Number(code === "p" || code === "a" ? first : second);
+  if (!Number.isInteger(page)) {
+    return null;
   }
-  if (kind === "x" && Number.isInteger(Number(first)) && Number.isInteger(Number(second))) {
-    return { wheelId, kind: "remove", userId: Number(first), page: Number(second) };
+  if (code === "p" || code === "a") {
+    return { wheelId, kind: "page", mode: code === "a" ? "add" : "remove", page };
+  }
+  const userId = Number(first);
+  if ((code === "x" || code === "y") && Number.isInteger(userId)) {
+    return { wheelId, kind: "pick", mode: code === "y" ? "add" : "remove", userId, page };
   }
   return null;
 }
 
-export function removePageCount(memberCount: number): number {
-  return Math.max(1, Math.ceil(memberCount / REMOVE_PAGE_SIZE));
+export function managePageCount(memberCount: number): number {
+  return Math.max(1, Math.ceil(memberCount / MANAGE_PAGE_SIZE));
 }
 
-function removeLabel(name: string): string {
+function manageLabel(mode: ManageMode, name: string): string {
   const chars = [...name];
-  const short = chars.length > MAX_REMOVE_LABEL ? `${chars.slice(0, MAX_REMOVE_LABEL - 1).join("")}\u2026` : name;
-  return `Remove ${short}`;
+  const short = chars.length > MAX_MANAGE_LABEL ? `${chars.slice(0, MAX_MANAGE_LABEL - 1).join("")}\u2026` : name;
+  return `${mode === "add" ? "Add" : "Remove"} ${short}`;
 }
 
-export function removeKeyboard(wheelId: number, members: { id: string; name: string }[], page: number): InlineKeyboard {
+export function manageKeyboard(
+  wheelId: number,
+  mode: ManageMode,
+  members: { id: string; name: string }[],
+  page: number,
+): InlineKeyboard {
   const keyboard = new InlineKeyboard();
-  const pages = removePageCount(members.length);
+  const pages = managePageCount(members.length);
   const current = Math.min(Math.max(page, 0), pages - 1);
-  members.slice(current * REMOVE_PAGE_SIZE, (current + 1) * REMOVE_PAGE_SIZE).forEach((member) => {
+  members.slice(current * MANAGE_PAGE_SIZE, (current + 1) * MANAGE_PAGE_SIZE).forEach((member) => {
     keyboard
-      .text(removeLabel(member.name), encodeRemove({ wheelId, kind: "remove", userId: Number(member.id), page: current }))
+      .text(
+        manageLabel(mode, member.name),
+        encodeManage({ wheelId, kind: "pick", mode, userId: Number(member.id), page: current }),
+      )
       .row();
   });
   if (current > 0) {
-    keyboard.text("Previous", encodeRemove({ wheelId, kind: "page", page: current - 1 }));
+    keyboard.text("Previous", encodeManage({ wheelId, kind: "page", mode, page: current - 1 }));
   }
   if (current < pages - 1) {
-    keyboard.text("Next", encodeRemove({ wheelId, kind: "page", page: current + 1 }));
+    keyboard.text("Next", encodeManage({ wheelId, kind: "page", mode, page: current + 1 }));
   }
-  return keyboard.row().text("Back", encodeRemove({ wheelId, kind: "back" }));
+  const other: ManageMode = mode === "add" ? "remove" : "add";
+  return keyboard
+    .row()
+    .text(other === "add" ? "Add people" : "Remove people", encodeManage({ wheelId, kind: "page", mode: other, page: 0 }))
+    .text("Back", encodeManage({ wheelId, kind: "back" }));
 }
