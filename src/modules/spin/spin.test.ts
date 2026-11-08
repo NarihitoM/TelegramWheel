@@ -11,7 +11,7 @@ import {
   hasCustomGroupSize,
 } from "./spin.keyboard.js";
 import { toVisualOrder } from "./spin.fonts.js";
-import { chunkLines, formatResult } from "./spin.message.js";
+import { chunkLines, describeSplit, formatResult } from "./spin.message.js";
 import { isValidConfig, shuffle, splitIntoTeams } from "./spin.service.js";
 import type { Member } from "./spin.types.js";
 
@@ -135,5 +135,12 @@ describe("toVisualOrder", () => {
   it("leaves other text unchanged", () => {
     assert.equal(toVisualOrder("Aung Thanlwin Oo"), "Aung Thanlwin Oo");
     assert.equal(toVisualOrder("\u{1D4DD}\u{1D4EA}"), "\u{1D4DD}\u{1D4EA}");
+  });
+});
+
+describe("describeSplit", () => {
+  it("uses clear wording with singular and plural", () => {
+    assert.equal(describeSplit(8, 1), "8 groups, each with 1 member");
+    assert.equal(describeSplit(2, 5), "2 groups, each with 5 members");
   });
 });

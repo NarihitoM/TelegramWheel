@@ -23,7 +23,7 @@ User: taps [2]
 Bot:  2 groups. How many members per group?
       [1] [2] [3]
 User: taps [3]
-Bot:  2 groups x 3 members from 6 members. Spin?
+Bot:  2 groups, each with 3 members. 6 members in total. Spin?
       [Spin] [Back] [Cancel]
 User: taps [Spin]
 Bot:  posts the result as text and as an image

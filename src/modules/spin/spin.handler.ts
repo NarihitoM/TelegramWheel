@@ -16,7 +16,7 @@ import {
   pickChatKeyboard,
   type WheelCallback,
 } from "./spin.keyboard.js";
-import { escapeHtml, formatResult } from "./spin.message.js";
+import { describeSplit, escapeHtml, formatResult } from "./spin.message.js";
 import { isValidConfig, splitIntoTeams } from "./spin.service.js";
 import type { Member } from "./spin.types.js";
 import {
@@ -85,9 +85,10 @@ async function showConfirm(api: Api, wheel: Wheel, teamCount: number, teamSize: 
   await editPanel(
     api,
     wheel,
-    `${teamCount} groups x ${teamSize} members from ${wheel.members.length} members` +
+    `${describeSplit(teamCount, teamSize)}.\n` +
+      `${wheel.members.length} members in total` +
       (leftOut > 0 ? `, ${leftOut} left out` : "") +
-      ". Spin?",
+      ".\n\nSpin?",
     confirmKeyboard(wheel.id),
   );
 }

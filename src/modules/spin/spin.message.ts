@@ -6,6 +6,14 @@ export function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+function plural(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? "" : "s"}`;
+}
+
+export function describeSplit(teamCount: number, teamSize: number): string {
+  return `${plural(teamCount, "group")}, each with ${plural(teamSize, "member")}`;
+}
+
 function memberLine(member: Member, index: number): string {
   const username = member.username ? ` (@${member.username})` : "";
   return `${index + 1}. ${escapeHtml(member.name)}${username}`;
@@ -17,7 +25,7 @@ export function formatResult(result: SpinResult, chatTitle: string): string[] {
   const lines = [
     "<b>Spin Wheel Result</b>",
     escapeHtml(chatTitle),
-    `${result.teams.length} groups x ${teamSize} members (${total} total)`,
+    `${describeSplit(result.teams.length, teamSize)} (${plural(total, "member")} total)`,
   ];
 
   result.teams.forEach((team, index) => {

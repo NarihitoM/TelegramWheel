@@ -1,5 +1,6 @@
 import { ImageResponse } from "@vercel/og";
 import { IMAGE_FONT_FAMILY, loadImageFonts, toVisualOrder } from "./spin.fonts.js";
+import { describeSplit } from "./spin.message.js";
 import type { Member, SpinResult } from "./spin.types.js";
 
 type Style = Record<string, string | number>;
@@ -87,7 +88,7 @@ export async function renderResultImage(result: SpinResult, chatTitle: string): 
   );
 
   const subtitle = [
-    `${result.teams.length} groups x ${result.teams[0]?.length ?? 0} members`,
+    describeSplit(result.teams.length, result.teams[0]?.length ?? 0),
     result.leftovers.length > 0 ? `${result.leftovers.length} not picked` : "",
     hiddenTeams > 0 ? `+${hiddenTeams} groups in text` : "",
   ]
