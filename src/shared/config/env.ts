@@ -6,6 +6,11 @@ function requireEnv(name: string): string {
   return value;
 }
 
+function optionalNumber(name: string): number | null {
+  const value = Number(process.env[name]);
+  return Number.isInteger(value) && value > 0 ? value : null;
+}
+
 export const env = {
   get botToken() {
     return requireEnv("BOT_TOKEN");
@@ -15,5 +20,11 @@ export const env = {
   },
   get webhookUrl() {
     return requireEnv("WEBHOOK_URL");
+  },
+  get tgApiId() {
+    return optionalNumber("TG_API_ID");
+  },
+  get tgApiHash() {
+    return process.env.TG_API_HASH || null;
   },
 };

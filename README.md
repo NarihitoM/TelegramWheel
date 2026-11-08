@@ -37,13 +37,9 @@ Bot:  posts the result as text and as an image
 
 ### Who is in the list
 
-Telegram does not let bots read a chat's full member list. The bot builds its own list from:
+When `/wheel` starts, the bot scans the full member list of the group. It logs in to Telegram's MTProto API with its own bot token (no user account), which needs `TG_API_ID` and `TG_API_HASH` from [my.telegram.org](https://my.telegram.org). The login session is stored in the `Setting` table, so it only signs in once.
 
-- the chat's admins
-- people who join after the bot is added
-- anyone who sends a message in the chat
-
-The bot must be an **admin** to see join/leave events and every message. Quiet members the bot hasn't seen yet just tap **Join** on the wheel.
+If those two values are not set, or the scan fails, the bot falls back to members it has seen: admins, people who joined after it was added, and anyone who sent a message (the bot must be an admin to see these). Anyone missing can tap **Join**.
 
 ### Channels
 
@@ -72,6 +68,8 @@ Fill in `.env`:
 | `WEBHOOK_SECRET` | Random string using only `A-Z a-z 0-9 _ -`. Telegram sends it back so the webhook can reject fake requests |
 | `WEBHOOK_URL` | Your Vercel URL, e.g. `https://your-app.vercel.app` |
 | `DATABASE_URL` | Postgres connection string |
+| `TG_API_ID` | Optional. App api_id from my.telegram.org, enables the full member scan |
+| `TG_API_HASH` | Optional. App api_hash from my.telegram.org |
 
 ### 3. Create the database tables
 
@@ -125,7 +123,7 @@ src/modules/members/            Remembers members from messages, joins and admin
 src/modules/spin/               /wheel flow, join panel, keyboards, split logic, text and image output
 src/modules/start/              /start and /help, also sent when the bot joins a chat
 src/modules/credit/             /credit command
-src/shared/                     Env config and Prisma client
+src/shared/                     Env config, Prisma client, bot MTProto client
 scripts/                        Webhook setup
 prisma/schema/                  Database schema, one file per area, plus migrations
 ```

@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { Api } from "grammy";
 import type { User } from "grammy/types";
+import { isMtprotoEnabled, withBotClient } from "../../shared/lib/mtproto.js";
 import { prisma } from "../../shared/lib/prisma.js";
 import type { Member } from "../spin/spin.types.js";
 
@@ -64,4 +65,43 @@ export async function syncAdmins(api: Api, chatId: number): Promise<void> {
     chatId,
     admins.map((admin) => admin.user),
   );
+}
+
+const SCAN_LIMIT = 10000;
+
+export async function scanChatMembers(chatId: number): Promise<Member[] | null> {
+  if (!isMtprotoEnabled()) {
+    return null;
+  }
+
+  try {
+    const members = await withBotClient(async (client) => {
+      const entity = await client.getEntity(chatId);
+      const users = await client.getParticipants(entity, { limit: SCAN_LIMIT });
+      return users
+        .filter((user) => !user.bot && !user.deleted)
+        .map((user) => {
+          const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+          return {
+            id: user.id.toString(),
+            name: name || user.username || `User ${user.id.toString()}`,
+            username: user.username ?? undefined,
+          };
+        });
+    });
+
+    await prisma.knownMember.createMany({
+      data: members.map((member) => ({
+        chatId: BigInt(chatId),
+        userId: BigInt(member.id),
+        name: member.name,
+        username: member.username,
+      })),
+      skipDuplicates: true,
+    });
+    return members;
+  } catch (error) {
+    console.error(`Failed to scan members of ${chatId}:`, error);
+    return null;
+  }
 }

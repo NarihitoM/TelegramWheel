@@ -1,7 +1,7 @@
 import { Composer, GrammyError, InputFile, type Api, type Context, type InlineKeyboard } from "grammy";
 import { prisma } from "../../shared/lib/prisma.js";
 import { claimWheelCooldown, isGroupChat, listActiveChats, saveChat } from "../chat/chat.service.js";
-import { listKnownMembers, rememberMembers, syncAdmins, toMember } from "../members/members.service.js";
+import { listKnownMembers, rememberMembers, scanChatMembers, syncAdmins, toMember } from "../members/members.service.js";
 import { renderResultImage } from "./spin.image.js";
 import {
   confirmKeyboard,
@@ -110,9 +110,12 @@ async function closeWheel(api: Api, wheel: Wheel, text: string): Promise<void> {
 }
 
 async function collectMembers(api: Api, chatId: number, owner: Member): Promise<Member[]> {
-  await syncAdmins(api, chatId);
-  const known = await listKnownMembers(chatId);
-  return known.some((member) => member.id === owner.id) ? known : [owner, ...known];
+  let members = await scanChatMembers(chatId);
+  if (!members) {
+    await syncAdmins(api, chatId);
+    members = await listKnownMembers(chatId);
+  }
+  return members.some((member) => member.id === owner.id) ? members : [owner, ...members];
 }
 
 async function openWheel(api: Api, chatId: number, owner: Member): Promise<Wheel | null> {

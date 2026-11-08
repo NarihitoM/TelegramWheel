@@ -18,7 +18,8 @@
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "@vercel/og": "^0.8.5",
-    "grammy": "^1.46.0"
+    "grammy": "^1.46.0",
+    "telegram": "^2.26.22"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
