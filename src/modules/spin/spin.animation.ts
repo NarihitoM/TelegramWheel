@@ -7,9 +7,9 @@ import type { CoinSide } from "./spin.service.js";
 
 export type AnimationName = "wheel" | "loading";
 
-export const COIN_ANIMATION_MS = 3_000;
+export const COIN_ANIMATION_MS = 2_200;
 
-const COIN_STICKERS: Record<CoinSide, string> = { Heads: "coin-heads.tgs", Tails: "coin-tails.tgs" };
+const COIN_FILES: Record<CoinSide, string> = { Heads: "coin-heads", Tails: "coin-tails" };
 
 function fileIdKey(fileName: string): string {
   return `asset_${fileName}_file_id`;
@@ -47,9 +47,14 @@ async function sendAsset<T>(
   return sent;
 }
 
-export function sendCoinSticker(api: Api, chatId: number, side: CoinSide): Promise<Message.StickerMessage> {
+export function sendCoinSticker(
+  api: Api,
+  chatId: number,
+  side: CoinSide,
+  animated: boolean,
+): Promise<Message.StickerMessage> {
   return sendAsset(
-    COIN_STICKERS[side],
+    `${COIN_FILES[side]}.${animated ? "tgs" : "webp"}`,
     (file) => api.sendSticker(chatId, file),
     (message) => message.sticker.file_id,
   );

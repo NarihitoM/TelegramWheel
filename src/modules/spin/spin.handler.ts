@@ -507,20 +507,24 @@ async function animateCoin(api: Api, wheel: Wheel, name: string): Promise<void> 
   const title = `<b>Coin flip</b> by ${name}`;
   const side = flipCoin();
   await editPanel(api, wheel, title);
-  const coin = await sendCoinSticker(api, wheel.chatId, side).catch((error: unknown) => {
+  const flipping = await sendCoinSticker(api, wheel.chatId, side, true).catch((error: unknown) => {
     console.error("Failed to send coin sticker:", error);
     return null;
   });
-  if (!coin) {
+  if (!flipping) {
     await editPanel(api, wheel, `${title}\nResult: <b>${side}</b>`);
     return;
   }
 
   await delay(COIN_ANIMATION_MS);
+  const landed = await sendCoinSticker(api, wheel.chatId, side, false).catch(() => null);
+  if (landed) {
+    await api.deleteMessage(wheel.chatId, flipping.message_id).catch(() => undefined);
+  }
   await api
     .sendMessage(wheel.chatId, `${name} flipped <b>${side}</b>.`, {
       parse_mode: "HTML",
-      reply_parameters: { message_id: coin.message_id, allow_sending_without_reply: true },
+      reply_parameters: { message_id: (landed ?? flipping).message_id, allow_sending_without_reply: true },
     })
     .catch(() => undefined);
 }
