@@ -12,7 +12,7 @@ A Telegram bot for random picks in groups and channels. Anyone in the chat sends
 
 - **Split into groups**: members join with a button, the starter picks the number of groups and members per group, and the bot posts the result as text and as an image.
 - **Pick a winner**: members join with a button, the starter picks how many winners, and the bot posts the winners.
-- **Coin flip**: a coin toss GIF, then heads or tails.
+- **Coin flip**: an animated coin sticker, like the dice, then heads or tails.
 - **Dice**: Telegram's animated dice, followed by a message with the number.
 
 Built with Node.js, TypeScript, [grammY](https://grammy.dev), Prisma (Postgres) and `@vercel/og`. It runs on Vercel as a webhook and only needs a bot token and a database.
@@ -49,7 +49,8 @@ Bot:  posts the result as text and as an image
 ```
 
 - Pick a winner works the same way up to Start, then asks "How many winners?" (1 up to one less than the member count) and posts the winners.
-- Coin flip and Dice are one tap. Coin flip sends a coin toss GIF that lands on the result, then the caption shows Heads or Tails. Dice sends Telegram's animated dice and, once it stops, replies with "Name rolled a 4."
+- Coin flip and Dice are one tap. Coin flip sends an animated coin sticker that lands on the result, then replies with "Name flipped Heads." Dice sends Telegram's animated dice and, once it stops, replies with "Name rolled a 4."
+- While the bot works, an animated placeholder shows what is happening: a loading animation for "Fetching members list..." and a spinning wheel for "Spinning..." and "Picking...". It is removed once the result is posted.
 - Buttons only offer choices that fit the member count. When only one size fits, the bot skips that question.
 - Anyone in the chat can send `/wheel` and choose from the menu. Whoever chooses Split into groups or Pick a winner becomes the starter. Each chat has a 10 second cooldown between wheels.
 - Anyone can tap Join or Leave. Only the starter can press Start, Spin and the number buttons.
@@ -148,7 +149,7 @@ src/modules/start/              /start and /help, also sent when the bot joins a
 src/modules/credit/             /credit command
 src/shared/                     Env config, Prisma client, bot MTProto client
 scripts/                        Webhook setup
-assets/                         Coin flip GIFs (sent once, then reused by Telegram file id)
+assets/                         Coin flip stickers (.tgs) and loading GIFs, uploaded once then reused by Telegram file id
 prisma/schema/                  Database schema, one file per area, plus migrations
 ```
 

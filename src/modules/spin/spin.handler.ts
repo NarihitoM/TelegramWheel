@@ -3,7 +3,7 @@ import type { User } from "grammy/types";
 import { prisma } from "../../shared/lib/prisma.js";
 import { claimWheelCooldown, isGroupChat, listActiveChannels, saveChat } from "../chat/chat.service.js";
 import { listKnownMembers, rememberMembers, scanChatMembers, syncAdmins, toMember } from "../members/members.service.js";
-import { COIN_ANIMATION_MS, sendCoinAnimation } from "./spin.coin.js";
+import { COIN_ANIMATION_MS, sendCoinSticker, showLoading } from "./spin.animation.js";
 import { renderResultImages } from "./spin.image.js";
 import {
   confirmKeyboard,
@@ -57,6 +57,7 @@ const EXIT_IDLE_MS = 60_000;
 const ALBUM_SIZE = 10;
 const DICE_EMOJI = "\u{1F3B2}";
 const DICE_ANIMATION_MS = 4_000;
+const MIN_LOADING_MS = 2_000;
 const ENDED_MESSAGE = "This wheel has ended. Send /wheel to start a new one.";
 const MENU_TEXT = [
   "<b>Spin Wheel</b>",
@@ -174,20 +175,39 @@ async function openMenu(api: Api, chatId: number, owner: Member): Promise<boolea
   return true;
 }
 
-async function openWheel(api: Api, chatId: number, panelId: number, owner: Member, mode: WheelMode): Promise<void> {
-  await api.editMessageText(chatId, panelId, "Fetching members list...").catch(() => undefined);
+async function deletePanel(api: Api, wheel: Wheel): Promise<void> {
+  if (wheel.messageId !== null) {
+    await api.deleteMessage(wheel.chatId, wheel.messageId).catch(() => undefined);
+  }
+}
 
-  let created: Wheel;
+async function openWheel(api: Api, menu: Wheel, owner: Member, mode: WheelMode): Promise<void> {
+  const { chatId } = menu;
+  await deletePanel(api, menu);
+  const stopLoading = await showLoading(api, chatId, "loading", "<b>Fetching members list...</b>");
+
   try {
     const members = await collectMembers(api, chatId, owner);
-    created = await createWheel(chatId, owner, members, { mode });
-    await setWheelMessage(created.id, panelId);
+    const created = await createWheel(chatId, owner, members, { mode });
+    const panel = await api
+      .sendMessage(chatId, joinText(created), { parse_mode: "HTML", reply_markup: joinKeyboard(created.id) })
+      .catch(() => null);
+    if (panel) {
+      await setWheelMessage(created.id, panel.message_id);
+    } else {
+      await moveWheel(created.id, OPEN_STEPS, { step: "cancelled" });
+    }
   } catch (error) {
-    await api.editMessageText(chatId, panelId, "Couldn't fetch the members list. Please try again.").catch(() => undefined);
+    await api.sendMessage(chatId, "Couldn't fetch the members list. Please try again.").catch(() => undefined);
     throw error;
+  } finally {
+    await stopLoading();
   }
+}
 
-  await showJoin(api, { ...created, messageId: panelId });
+async function postFailure(api: Api, chatId: number, error: unknown): Promise<void> {
+  const reason = error instanceof GrammyError ? error.description : "unknown error";
+  await api.sendMessage(chatId, `Couldn't post the result: ${escapeHtml(reason)}`, { parse_mode: "HTML" }).catch(() => undefined);
 }
 
 async function postText(
@@ -221,9 +241,10 @@ async function postWinners(api: Api, wheel: Wheel, count: number): Promise<void>
     return;
   }
 
+  await deletePanel(api, wheel);
+  const stopLoading = await showLoading(api, wheel.chatId, "wheel", "<b>Picking...</b>");
   const title = await chatTitle(wheel.chatId);
   const winners = pickWinners(wheel.members, count);
-  await editPanel(api, wheel, "Picking...");
 
   await prisma.spin.create({
     data: {
@@ -237,6 +258,7 @@ async function postWinners(api: Api, wheel: Wheel, count: number): Promise<void>
   });
 
   const total = wheel.members.length;
+  await delay(MIN_LOADING_MS);
   try {
     await postText(
       api,
@@ -246,13 +268,9 @@ async function postWinners(api: Api, wheel: Wheel, count: number): Promise<void>
       count === 1 ? "Winner" : "Winners",
     );
   } catch (error) {
-    const reason = error instanceof GrammyError ? error.description : "unknown error";
-    await editPanel(api, wheel, `Couldn't post the result: ${escapeHtml(reason)}`);
-    return;
-  }
-
-  if (wheel.messageId !== null) {
-    await api.deleteMessage(wheel.chatId, wheel.messageId).catch(() => undefined);
+    await postFailure(api, wheel.chatId, error);
+  } finally {
+    await stopLoading();
   }
 }
 
@@ -292,9 +310,10 @@ async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
     return;
   }
 
+  await deletePanel(ctx.api, wheel);
+  const stopLoading = await showLoading(ctx.api, wheel.chatId, "wheel", "<b>Spinning...</b>");
   const title = await chatTitle(wheel.chatId);
   const result = splitIntoTeams(wheel.members, teamCount, teamSize);
-  await editPanel(ctx.api, wheel, "Spinning...");
 
   await prisma.spin.create({
     data: {
@@ -307,6 +326,7 @@ async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
     },
   });
 
+  await delay(MIN_LOADING_MS);
   try {
     await postText(
       ctx.api,
@@ -316,8 +336,8 @@ async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
       "Spin Wheel Result",
     );
   } catch (error) {
-    const reason = error instanceof GrammyError ? error.description : "unknown error";
-    await editPanel(ctx.api, wheel, `Couldn't post the result: ${escapeHtml(reason)}`);
+    await stopLoading();
+    await postFailure(ctx.api, wheel.chatId, error);
     return;
   }
 
@@ -328,10 +348,7 @@ async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
   await postResultImages(ctx.api, wheel.chatId, images).catch((error: unknown) => {
     console.error("Failed to send result images:", error);
   });
-
-  if (wheel.messageId !== null) {
-    await ctx.api.deleteMessage(wheel.chatId, wheel.messageId).catch(() => undefined);
-  }
+  await stopLoading();
 }
 
 async function askCustomNumber(ctx: Context, wheel: Wheel, prompt: string): Promise<boolean> {
@@ -489,22 +506,22 @@ function delay(ms: number): Promise<void> {
 async function animateCoin(api: Api, wheel: Wheel, name: string): Promise<void> {
   const title = `<b>Coin flip</b> by ${name}`;
   const side = flipCoin();
-  const result = `${title}\nResult: <b>${side}</b>`;
-  const sent = await sendCoinAnimation(api, wheel.chatId, side, `${title}\nFlipping...`).catch((error: unknown) => {
-    console.error("Failed to send coin animation:", error);
+  await editPanel(api, wheel, title);
+  const coin = await sendCoinSticker(api, wheel.chatId, side).catch((error: unknown) => {
+    console.error("Failed to send coin sticker:", error);
     return null;
   });
-  if (!sent) {
-    await editPanel(api, wheel, result);
+  if (!coin) {
+    await editPanel(api, wheel, `${title}\nResult: <b>${side}</b>`);
     return;
   }
 
-  if (wheel.messageId !== null) {
-    await api.deleteMessage(wheel.chatId, wheel.messageId).catch(() => undefined);
-  }
   await delay(COIN_ANIMATION_MS);
   await api
-    .editMessageCaption(wheel.chatId, sent.message_id, { caption: result, parse_mode: "HTML" })
+    .sendMessage(wheel.chatId, `${name} flipped <b>${side}</b>.`, {
+      parse_mode: "HTML",
+      reply_parameters: { message_id: coin.message_id, allow_sending_without_reply: true },
+    })
     .catch(() => undefined);
 }
 
@@ -524,8 +541,7 @@ async function rollDice(api: Api, wheel: Wheel, name: string): Promise<void> {
 }
 
 async function handleModeAction(ctx: Context & { from: User }, wheel: Wheel, callback: WheelCallback): Promise<void> {
-  const panelId = wheel.messageId;
-  if (panelId === null || !(await moveWheel(wheel.id, ["mode"], { step: "done" }))) {
+  if (wheel.messageId === null || !(await moveWheel(wheel.id, ["mode"], { step: "done" }))) {
     await ctx.answerCallbackQuery({ text: ENDED_MESSAGE, show_alert: true });
     return;
   }
@@ -544,7 +560,7 @@ async function handleModeAction(ctx: Context & { from: User }, wheel: Wheel, cal
       return;
     }
     default: {
-      await openWheel(ctx.api, wheel.chatId, panelId, player, callback.action === "win" ? "winner" : "split");
+      await openWheel(ctx.api, wheel, player, callback.action === "win" ? "winner" : "split");
     }
   }
 }
