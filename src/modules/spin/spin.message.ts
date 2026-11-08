@@ -97,3 +97,16 @@ export function chunkLines(lines: string[], maxLength: number): string[] {
   }
   return chunks;
 }
+
+const MAX_MANAGER_NAMES = 5;
+
+export function describeManagers(ownerName: string, adminNames: string[]): string {
+  const names = [...new Set([ownerName, ...adminNames])];
+  const shown = names.slice(0, MAX_MANAGER_NAMES);
+  const hidden = names.length - shown.length;
+  if (hidden > 0) {
+    return `${shown.join(", ")} or ${plural(hidden, "other admin")}`;
+  }
+  const last = shown.pop() ?? ownerName;
+  return shown.length > 0 ? `${shown.join(", ")} or ${last}` : last;
+}

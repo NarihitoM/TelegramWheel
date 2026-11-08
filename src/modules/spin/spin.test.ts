@@ -20,6 +20,7 @@ import { toVisualOrder } from "./spin.fonts.js";
 import { buildSegments, estimateLines } from "./spin.image.js";
 import {
   chunkLines,
+  describeManagers,
   describeSplit,
   formatResult,
   formatSummary,
@@ -225,6 +226,20 @@ describe("describeSplit", () => {
     assert.equal(describeSplit(8, 1, 8), "8 groups, each with 1 member");
     assert.equal(describeSplit(2, 5, 10), "2 groups, each with 5 members");
     assert.equal(describeSplit(3, 2, 7), "3 groups, each with 2 members, plus 1 extra group with 1 member");
+  });
+});
+
+describe("describeManagers", () => {
+  it("lists the starter and admins without repeats", () => {
+    assert.equal(describeManagers("Narihito", []), "Narihito");
+    assert.equal(describeManagers("Narihito", ["Narihito"]), "Narihito");
+    assert.equal(describeManagers("Mya", ["Narihito", "Aung"]), "Mya, Narihito or Aung");
+  });
+
+  it("caps long admin lists", () => {
+    const admins = ["A", "B", "C", "D", "E", "F"];
+    assert.equal(describeManagers("Owner", admins), "Owner, A, B, C, D or 2 other admins");
+    assert.equal(describeManagers("Owner", admins.slice(0, 5)), "Owner, A, B, C, D or 1 other admin");
   });
 });
 

@@ -28,6 +28,7 @@ import {
   type WheelCallback,
 } from "./spin.keyboard.js";
 import {
+  describeManagers,
   describeSplit,
   escapeHtml,
   formatResult,
@@ -65,6 +66,7 @@ const DICE_EMOJI = "\u{1F3B2}";
 const CELEBRATION_EMOJI = "\u{1F389}";
 const DICE_ANIMATION_MS = 4_000;
 const MIN_LOADING_MS = 2_000;
+const MAX_ALERT_LENGTH = 200;
 const CHAT_ACTION_INTERVAL_MS = 4_000;
 
 type ChatAction = "typing" | "upload_photo";
@@ -97,7 +99,18 @@ async function editPanel(api: Api, wheel: Wheel, text: string, keyboard?: Inline
   }
 }
 
-function joinText(wheel: Wheel): string {
+async function managersOf(api: Api, wheel: Wheel): Promise<string> {
+  const admins = await api.getChatAdministrators(wheel.chatId).catch(() => []);
+  const names = admins.filter((admin) => !admin.user.is_bot).map((admin) => toMember(admin.user).name);
+  return describeManagers(wheel.ownerName, names);
+}
+
+function alertText(text: string): string {
+  const chars = [...text];
+  return chars.length > MAX_ALERT_LENGTH ? `${chars.slice(0, MAX_ALERT_LENGTH - 1).join("")}\u2026` : text;
+}
+
+function joinText(wheel: Wheel, managers: string): string {
   const owner = escapeHtml(wheel.ownerName);
   const listed = wheel.members.slice(0, MAX_LISTED_MEMBERS).map((member, index) => `${index + 1}. ${escapeHtml(member.name)}`);
   const hidden = wheel.members.length - listed.length;
@@ -106,7 +119,7 @@ function joinText(wheel: Wheel): string {
     `<b>${title}</b> by ${owner}`,
     "Not in the list? Tap Join. Want out? Tap Leave.",
     `${owner} taps Start when everyone is in.`,
-    `${owner} or an admin can tap Add/Remove to change the list.`,
+    `${escapeHtml(managers)} can tap Add/Remove to change the list.`,
     "",
     `<b>Members (${wheel.members.length})</b>`,
     ...(listed.length > 0 ? listed : ["No one yet"]),
@@ -115,7 +128,7 @@ function joinText(wheel: Wheel): string {
 }
 
 async function showJoin(api: Api, wheel: Wheel): Promise<void> {
-  await editPanel(api, wheel, joinText(wheel), joinKeyboard(wheel.id));
+  await editPanel(api, wheel, joinText(wheel, await managersOf(api, wheel)), joinKeyboard(wheel.id));
 }
 
 async function showGroupCount(api: Api, wheel: Wheel): Promise<void> {
@@ -250,7 +263,7 @@ async function openWheel(api: Api, menu: Wheel, owner: Member, mode: WheelMode):
     const created = await createWheel(chatId, owner, members, { mode });
     await loading.stop();
     if (loading.panelHidden) {
-      const panel = await api.sendMessage(chatId, joinText(created), {
+      const panel = await api.sendMessage(chatId, joinText(created, await managersOf(api, created)), {
         parse_mode: "HTML",
         reply_markup: joinKeyboard(created.id),
       });
@@ -529,7 +542,9 @@ async function exitWheel(ctx: Context & { from: User }, wheel: Wheel): Promise<v
   const allowed = ctx.from.id === wheel.ownerId || idle || (await isChatAdmin(ctx.api, wheel.chatId, ctx.from.id));
   if (!allowed) {
     await ctx.answerCallbackQuery({
-      text: `Only ${wheel.ownerName} or an admin can exit now. Anyone can exit after 1 minute of no activity.`,
+      text: alertText(
+        `Only ${await managersOf(ctx.api, wheel)} can exit now. Anyone can exit after 1 minute of no activity.`,
+      ),
       show_alert: true,
     });
     return;
@@ -797,8 +812,8 @@ async function canManage(api: Api, wheel: Wheel, userId: number): Promise<boolea
   return userId === wheel.ownerId || (await isChatAdmin(api, wheel.chatId, userId));
 }
 
-function noPermission(wheel: Wheel): string {
-  return `You don't have permission to add or remove members here. Only ${wheel.ownerName} or an admin can.`;
+function noPermission(managers: string): string {
+  return alertText(`You don't have permission to add or remove members here. Only ${managers} can.`);
 }
 
 async function manageList(wheel: Wheel, mode: ManageMode): Promise<Member[]> {
@@ -810,21 +825,21 @@ async function manageList(wheel: Wheel, mode: ManageMode): Promise<Member[]> {
   return known.filter((member) => !inWheel.has(member.id));
 }
 
-function manageText(wheel: Wheel, mode: ManageMode, list: Member[], page: number): string {
+function manageText(mode: ManageMode, list: Member[], page: number, managers: string): string {
   const pages = managePageCount(list.length);
   const pageInfo = pages > 1 ? ` | Page ${Math.min(page, pages - 1) + 1} of ${pages}` : "";
-  const owner = escapeHtml(wheel.ownerName);
+  const owner = escapeHtml(managers);
   if (mode === "add") {
     return [
       "<b>Add members</b>",
-      `Tap a name to add that person to the wheel. Only ${owner} or an admin can add.`,
+      `Tap a name to add that person to the wheel. Only ${owner} can add.`,
       "",
       list.length > 0 ? `Not in the wheel: ${list.length}${pageInfo}` : "Everyone the bot knows in this chat is already in the wheel.",
     ].join("\n");
   }
   return [
     "<b>Remove members</b>",
-    `Tap a name to remove that person from the wheel. Only ${owner} or an admin can remove.`,
+    `Tap a name to remove that person from the wheel. Only ${owner} can remove.`,
     "",
     `In the wheel: ${list.length}${pageInfo}`,
   ].join("\n");
@@ -833,7 +848,8 @@ function manageText(wheel: Wheel, mode: ManageMode, list: Member[], page: number
 async function showManageList(api: Api, wheel: Wheel, mode: ManageMode, page: number): Promise<void> {
   const list = await manageList(wheel, mode);
   const current = Math.min(Math.max(page, 0), managePageCount(list.length) - 1);
-  await editPanel(api, wheel, manageText(wheel, mode, list, current), manageKeyboard(wheel.id, mode, list, current));
+  const text = manageText(mode, list, current, await managersOf(api, wheel));
+  await editPanel(api, wheel, text, manageKeyboard(wheel.id, mode, list, current));
 }
 
 async function openManageList(ctx: Context & { from: User }, wheel: Wheel): Promise<void> {
@@ -842,7 +858,7 @@ async function openManageList(ctx: Context & { from: User }, wheel: Wheel): Prom
     return;
   }
   if (!(await canManage(ctx.api, wheel, ctx.from.id))) {
-    await ctx.answerCallbackQuery({ text: noPermission(wheel), show_alert: true });
+    await ctx.answerCallbackQuery({ text: noPermission(await managersOf(ctx.api, wheel)), show_alert: true });
     return;
   }
   await ctx.answerCallbackQuery();
@@ -870,7 +886,7 @@ spinHandler.callbackQuery(/^r:/, async (ctx) => {
     return;
   }
   if (!(await canManage(ctx.api, wheel, ctx.from.id))) {
-    await ctx.answerCallbackQuery({ text: noPermission(wheel), show_alert: true });
+    await ctx.answerCallbackQuery({ text: noPermission(await managersOf(ctx.api, wheel)), show_alert: true });
     return;
   }
 
