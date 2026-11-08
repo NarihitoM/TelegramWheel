@@ -4,6 +4,7 @@ import { prisma } from "../../shared/lib/prisma.js";
 import { claimWheelCooldown, isGroupChat, listActiveChannels, saveChat } from "../chat/chat.service.js";
 import { listKnownMembers, loadChatMembers, rememberMembers, syncAdmins, toMember } from "../members/members.service.js";
 import { COIN_ANIMATION_MS, sendCoinSticker, showLoading, type AnimationName } from "./spin.animation.js";
+import { getStoredAvatars, syncAvatars, type AvatarMap } from "../members/avatar.service.js";
 import { renderResultImages, renderWinnersImage } from "./spin.image.js";
 import {
   confirmKeyboard,
@@ -60,6 +61,9 @@ const DICE_EMOJI = "\u{1F3B2}";
 const CELEBRATION_EMOJI = "\u{1F389}";
 const DICE_ANIMATION_MS = 4_000;
 const MIN_LOADING_MS = 2_000;
+const MAX_AVATARS = 200;
+const PREFETCH_AVATARS_MS = 15_000;
+const RESULT_AVATARS_MS = 5_000;
 const ENDED_MESSAGE = "This wheel has ended. Send /wheel to start a new one.";
 const MENU_TEXT = [
   "<b>Spin Wheel</b>",
@@ -208,26 +212,37 @@ async function openWheel(api: Api, menu: Wheel, owner: Member, mode: WheelMode):
   }
   const loading = await startLoading(api, menu, "loading", `${MENU_TEXT}\n\n<b>Fetching members list...</b>`);
 
+  let members: Member[];
   try {
-    const members = await collectMembers(api, chatId, owner);
+    members = await collectMembers(api, chatId, owner);
     const created = await createWheel(chatId, owner, members, { mode });
     await loading.stop();
-    if (!loading.panelHidden) {
+    if (loading.panelHidden) {
+      const panel = await api.sendMessage(chatId, joinText(created), {
+        parse_mode: "HTML",
+        reply_markup: joinKeyboard(created.id),
+      });
+      await setWheelMessage(created.id, panel.message_id);
+    } else {
       await setWheelMessage(created.id, messageId);
       await showJoin(api, { ...created, messageId });
-      return;
     }
-    const panel = await api.sendMessage(chatId, joinText(created), {
-      parse_mode: "HTML",
-      reply_markup: joinKeyboard(created.id),
-    });
-    await setWheelMessage(created.id, panel.message_id);
   } catch (error) {
     await loading.stop();
     await deletePanel(api, menu);
     await api.sendMessage(chatId, "Couldn't fetch the members list. Please try again.").catch(() => undefined);
     throw error;
   }
+
+  await syncAvatars(api, members.slice(0, MAX_AVATARS), PREFETCH_AVATARS_MS).catch((error: unknown) => {
+    console.error("Failed to save profile photos:", error);
+  });
+}
+
+async function avatarsFor(api: Api, members: Member[]): Promise<AvatarMap> {
+  const shown = members.slice(0, MAX_AVATARS);
+  await syncAvatars(api, shown, RESULT_AVATARS_MS).catch(() => undefined);
+  return getStoredAvatars(shown).catch(() => new Map());
 }
 
 async function postFailure(api: Api, wheel: Wheel, error: unknown): Promise<void> {
@@ -291,10 +306,12 @@ async function postWinners(api: Api, wheel: Wheel, count: number): Promise<void>
   });
 
   const [picture] = await Promise.all([
-    renderWinnersImage(winners, title, total).catch((error: unknown) => {
-      console.error("Failed to render winners image:", error);
-      return null;
-    }),
+    avatarsFor(api, winners)
+      .then((avatars) => renderWinnersImage(winners, title, total, avatars))
+      .catch((error: unknown) => {
+        console.error("Failed to render winners image:", error);
+        return null;
+      }),
     delay(MIN_LOADING_MS),
   ]);
   await loading.stop();
@@ -378,10 +395,12 @@ async function postResult(ctx: Context, wheel: Wheel): Promise<void> {
   });
 
   const [images] = await Promise.all([
-    renderResultImages(result, title).catch((error: unknown) => {
-      console.error("Failed to render result images:", error);
-      return [];
-    }),
+    avatarsFor(ctx.api, result.teams.flat())
+      .then((avatars) => renderResultImages(result, title, avatars))
+      .catch((error: unknown) => {
+        console.error("Failed to render result images:", error);
+        return [];
+      }),
     delay(MIN_LOADING_MS),
   ]);
   await loading.stop();

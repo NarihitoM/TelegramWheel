@@ -1,0 +1,6 @@
+model Avatar {
+  userId    BigInt   @id
+  photoId   String?
+  data      Bytes?
+  updatedAt DateTime @updatedAt
+}

@@ -65,6 +65,12 @@ Scanning a big group takes a few seconds, so the scanned list can be cached in R
 
 If those two values are not set, or the scan fails, the bot falls back to members it has seen: admins, people who joined after it was added, and anyone who sent a message (the bot must be an admin to see these). Anyone missing can tap **Join**.
 
+### Profile photos
+
+Result and winner images show each user's profile photo next to their name, so it is clear who is who. Users without a photo (or with a hidden one) get a coloured circle with their first letter.
+
+Photos are saved in the `Avatar` table so spins don't wait for downloads. They are saved when the bot is added to a group, right after `/wheel` shows the join panel, and when someone joins the group. A photo is only downloaded again when it changed, checked at most every 3 days. Up to 200 photos are used per image; anyone after that gets the letter circle.
+
 ### Channels
 
 Users can't send commands inside a channel. Channel admins send `/wheel` to the bot in a private chat and pick the channel. The list only shows channels where that person is an admin, so nobody sees chats they don't manage. The wheel menu is posted in the channel, where subscribers can choose a mode and tap Join. The bot needs permission to post and edit messages there.

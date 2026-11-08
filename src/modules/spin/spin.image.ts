@@ -1,4 +1,5 @@
 import { ImageResponse } from "@vercel/og";
+import type { AvatarMap } from "../members/avatar.service.js";
 import { IMAGE_FONT_FAMILY, loadImageFonts, toVisualOrder } from "./spin.fonts.js";
 import type { Member, SpinResult } from "./spin.types.js";
 
@@ -9,8 +10,14 @@ interface OgNode {
   props: {
     style?: Style;
     children?: string | OgNode | OgNode[];
+    src?: string;
+    width?: number;
+    height?: number;
   };
 }
+
+const AVATAR_SIZE = 28;
+const AVATAR_GAP = 10;
 
 const WIDTH = 1200;
 const PADDING = 48;
@@ -120,9 +127,45 @@ function layoutPages(segments: CardSegment[], columns: number, textWidth: number
   return pages;
 }
 
-function card(segment: CardSegment, width: number, height: number): OgNode {
+function initial(name: string): string {
+  return ([...name.trim()][0] ?? "?").toUpperCase();
+}
+
+function avatar(member: Member, size: number, avatars: AvatarMap, color: string, style: Style = {}): OgNode {
+  const shape: Style = { width: size, height: size, borderRadius: size / 2, flexShrink: 0, ...style };
+  const src = avatars.get(member.id);
+  if (src) {
+    return { type: "img", props: { src, width: size, height: size, style: shape } };
+  }
+  return h(
+    "div",
+    {
+      ...shape,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: color,
+      color: "#ffffff",
+      fontSize: Math.round(size * 0.5),
+      fontWeight: 700,
+    },
+    initial(member.name),
+  );
+}
+
+function card(segment: CardSegment, width: number, height: number, avatars: AvatarMap): OgNode {
   const names = segment.members.map((member, index) =>
-    h("div", { ...NAME_STYLE, color: "#e5e7eb" }, `${segment.firstNumber + index}. ${toVisualOrder(displayName(member.name))}`),
+    h("div", { display: "flex", alignItems: "flex-start" }, [
+      avatar(member, AVATAR_SIZE, avatars, segment.color, {
+        marginRight: AVATAR_GAP,
+        marginTop: (NAME_HEIGHT - AVATAR_SIZE) / 2,
+      }),
+      h(
+        "div",
+        { ...NAME_STYLE, color: "#e5e7eb", flex: 1 },
+        `${segment.firstNumber + index}. ${toVisualOrder(displayName(member.name))}`,
+      ),
+    ]),
   );
 
   return h(
@@ -149,11 +192,15 @@ function card(segment: CardSegment, width: number, height: number): OgNode {
   );
 }
 
-export async function renderResultImages(result: SpinResult, chatTitle: string): Promise<Buffer[]> {
+export async function renderResultImages(
+  result: SpinResult,
+  chatTitle: string,
+  avatars: AvatarMap = new Map(),
+): Promise<Buffer[]> {
   const segments = buildSegments(result.teams);
   const columns = Math.min(segments.length, MAX_COLUMNS);
   const cardWidth = Math.floor((WIDTH - PADDING * 2 - GAP * (columns - 1)) / columns);
-  const textWidth = cardWidth - CARD_INNER_PADDING * 2;
+  const textWidth = cardWidth - CARD_INNER_PADDING * 2 - AVATAR_SIZE - AVATAR_GAP;
   const allPages = layoutPages(segments, columns, textWidth);
   const pages = allPages.slice(0, MAX_IMAGE_PAGES);
   const shown = pages.flatMap((page) => page.flatMap((row) => row.segments));
@@ -184,7 +231,7 @@ export async function renderResultImages(result: SpinResult, chatTitle: string):
       .filter(Boolean)
       .join("  |  ");
 
-    const cards = page.flatMap((row) => row.segments.map((segment) => card(segment, cardWidth, row.height)));
+    const cards = page.flatMap((row) => row.segments.map((segment) => card(segment, cardWidth, row.height, avatars)));
     const root = h(
       "div",
       {
@@ -219,7 +266,8 @@ const WINNER_HEADER_HEIGHT = 230;
 const WINNER_FONT_SIZE = 30;
 const WINNER_LINE_HEIGHT = 42;
 const WINNER_CARD_PADDING = 24;
-const WINNER_NUMBER_SIZE = 52;
+const WINNER_AVATAR_SIZE = 64;
+const SINGLE_WINNER_AVATAR_SIZE = 150;
 const GOLD = "#fbbf24";
 
 const CONFETTI = [
@@ -248,7 +296,53 @@ function confetti(): OgNode[] {
   );
 }
 
-function winnerCard(member: Member, rank: number, width: number, height: number, single: boolean): OgNode {
+function winnerAvatar(member: Member, rank: number, single: boolean, avatars: AvatarMap): OgNode {
+  const size = single ? SINGLE_WINNER_AVATAR_SIZE : WINNER_AVATAR_SIZE;
+  const badge = single ? 52 : 28;
+  return h(
+    "div",
+    {
+      display: "flex",
+      position: "relative",
+      width: size,
+      height: size,
+      flexShrink: 0,
+      marginRight: single ? 0 : 20,
+      marginBottom: single ? 24 : 0,
+    },
+    [
+      avatar(member, size, avatars, COLORS[(rank - 1) % COLORS.length] ?? GOLD, { border: `3px solid ${GOLD}` }),
+      h(
+        "div",
+        {
+          display: "flex",
+          position: "absolute",
+          right: -4,
+          bottom: -4,
+          alignItems: "center",
+          justifyContent: "center",
+          width: badge,
+          height: badge,
+          borderRadius: badge / 2,
+          backgroundColor: GOLD,
+          color: "#111827",
+          fontSize: Math.round(badge * 0.55),
+          fontWeight: 700,
+        },
+        String(rank),
+      ),
+    ],
+  );
+}
+
+function winnerCard(
+  member: Member,
+  rank: number,
+  width: number,
+  height: number,
+  single: boolean,
+  avatars: AvatarMap,
+): OgNode {
   const fontSize = single ? 64 : WINNER_FONT_SIZE;
   return h(
     "div",
@@ -265,24 +359,7 @@ function winnerCard(member: Member, rank: number, width: number, height: number,
       border: `3px solid ${GOLD}`,
     },
     [
-      h(
-        "div",
-        {
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: single ? 96 : WINNER_NUMBER_SIZE,
-          height: single ? 96 : WINNER_NUMBER_SIZE,
-          borderRadius: 999,
-          backgroundColor: GOLD,
-          color: "#111827",
-          fontSize: single ? 48 : 26,
-          fontWeight: 700,
-          marginRight: single ? 0 : 20,
-          marginBottom: single ? 24 : 0,
-        },
-        String(rank),
-      ),
+      winnerAvatar(member, rank, single, avatars),
       h(
         "div",
         { display: "flex", flexDirection: "column", alignItems: single ? "center" : "flex-start", flex: 1 },
@@ -312,18 +389,23 @@ function winnerCard(member: Member, rank: number, width: number, height: number,
 function winnerCardHeight(member: Member, textWidth: number): number {
   const lines = estimateLines(displayName(member.name), textWidth, WINNER_FONT_SIZE);
   const username = member.username ? 30 : 0;
-  return Math.max(WINNER_NUMBER_SIZE, lines * WINNER_LINE_HEIGHT + username) + WINNER_CARD_PADDING * 2 + 6;
+  return Math.max(WINNER_AVATAR_SIZE, lines * WINNER_LINE_HEIGHT + username) + WINNER_CARD_PADDING * 2 + 6;
 }
 
-export async function renderWinnersImage(winners: Member[], chatTitle: string, memberCount: number): Promise<Buffer> {
+export async function renderWinnersImage(
+  winners: Member[],
+  chatTitle: string,
+  memberCount: number,
+  avatars: AvatarMap = new Map(),
+): Promise<Buffer> {
   const shown = winners.slice(0, MAX_WINNERS_IN_IMAGE);
   const single = shown.length === 1;
   const columns = single ? 1 : WINNER_COLUMNS;
   const cardWidth = Math.floor((WIDTH - PADDING * 2 - GAP * (columns - 1)) / columns);
-  const textWidth = cardWidth - WINNER_CARD_PADDING * 2 - WINNER_NUMBER_SIZE - 20;
+  const textWidth = cardWidth - WINNER_CARD_PADDING * 2 - WINNER_AVATAR_SIZE - 20;
   const rows = chunk(shown, columns).map((members) => ({
     members,
-    height: single ? 320 : Math.max(...members.map((member) => winnerCardHeight(member, textWidth))),
+    height: single ? 400 : Math.max(...members.map((member) => winnerCardHeight(member, textWidth))),
   }));
   const hidden = winners.length - shown.length;
   const height =
@@ -341,7 +423,7 @@ export async function renderWinnersImage(winners: Member[], chatTitle: string, m
   const cards = rows.flatMap((row) =>
     row.members.map((member) => {
       rank += 1;
-      return winnerCard(member, rank, cardWidth, row.height, single);
+      return winnerCard(member, rank, cardWidth, row.height, single, avatars);
     }),
   );
 
