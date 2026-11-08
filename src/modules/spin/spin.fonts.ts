@@ -27,31 +27,47 @@ export const IMAGE_FONT_FAMILY = SOURCES.map((source) => `"${source.family}"`).j
 const TTF_USER_AGENT =
   "Mozilla/5.0 (Macintosh; U; Intel Mac OS X 10_6_8; de-at) AppleWebKit/533.21.1 (KHTML, like Gecko) Version/5.0.5 Safari/533.21.1";
 
-const cache = new Map<string, Promise<ArrayBuffer | null>>();
+const FETCH_TIMEOUT_MS = 5000;
+const FETCH_ATTEMPTS = 2;
+
+const cache = new Map<string, ArrayBuffer>();
 
 async function fetchFont(family: string, weight: FontWeight, text: string): Promise<ArrayBuffer | null> {
   const params = new URLSearchParams({ family: `${family}:wght@${weight}`, text });
   const css = await fetch(`https://fonts.googleapis.com/css2?${params}`, {
     headers: { "User-Agent": TTF_USER_AGENT },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   }).then((response) => (response.ok ? response.text() : ""));
 
   const url = css.match(/src: url\((.+?)\) format\('(?:opentype|truetype)'\)/)?.[1];
   if (!url) {
     return null;
   }
-  const font = await fetch(url);
+  const font = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   return font.ok ? font.arrayBuffer() : null;
 }
 
-function loadFont(family: string, weight: FontWeight, text: string): Promise<ArrayBuffer | null> {
+async function fetchWithRetry(family: string, weight: FontWeight, text: string): Promise<ArrayBuffer | null> {
+  for (let attempt = 0; attempt < FETCH_ATTEMPTS; attempt++) {
+    const data = await fetchFont(family, weight, text).catch(() => null);
+    if (data) {
+      return data;
+    }
+  }
+  return null;
+}
+
+async function loadFont(family: string, weight: FontWeight, text: string): Promise<ArrayBuffer | null> {
   const key = `${family}|${weight}|${text}`;
   const cached = cache.get(key);
   if (cached) {
     return cached;
   }
-  const pending = fetchFont(family, weight, text).catch(() => null);
-  cache.set(key, pending);
-  return pending;
+  const data = await fetchWithRetry(family, weight, text);
+  if (data) {
+    cache.set(key, data);
+  }
+  return data;
 }
 
 const MYANMAR_SYLLABLE = /([\u1000-\u1021\u103F])(\u1039[\u1000-\u1021])?([\u103B-\u103E]*)(\u1031)?/gu;

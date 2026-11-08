@@ -1,6 +1,5 @@
 import { ImageResponse } from "@vercel/og";
 import { IMAGE_FONT_FAMILY, loadImageFonts, toVisualOrder } from "./spin.fonts.js";
-import { describeSplit } from "./spin.message.js";
 import type { Member, SpinResult } from "./spin.types.js";
 
 type Style = Record<string, string | number>;
@@ -87,9 +86,12 @@ export async function renderResultImage(result: SpinResult, chatTitle: string): 
     card(`Group ${index + 1}`, team, COLORS[index % COLORS.length] ?? "#3b82f6", cardWidth, rowHeight - GAP),
   );
 
+  const totalMembers = result.teams.flat().length + result.leftovers.length;
   const subtitle = [
-    describeSplit(result.teams.length, result.teams[0]?.length ?? 0),
-    result.leftovers.length > 0 ? `${result.leftovers.length} not picked` : "",
+    `Total groups: ${result.teams.length}`,
+    `Total members: ${totalMembers}`,
+    `Per group: ${result.teams[0]?.length ?? 0}`,
+    result.leftovers.length > 0 ? `Not picked: ${result.leftovers.length}` : "",
     hiddenTeams > 0 ? `+${hiddenTeams} groups in text` : "",
   ]
     .filter(Boolean)
