@@ -54,6 +54,7 @@ Bot:  posts the result as text and as an image
 - Buttons only offer choices that fit the member count. When only one size fits, the bot skips that question.
 - Anyone in the chat can send `/wheel` and choose from the menu. Whoever chooses Split into groups or Pick a winner becomes the starter. Each chat has a 10 second cooldown between wheels.
 - Anyone can tap Join or Leave. Only the starter can press Start, Spin and the number buttons.
+- The starter or a chat admin can tap **Remove** to take out people who are offline or should not take part. Telegram can't show group buttons to just one person, so the bot sends the list in a private chat (only that person sees it). Tapping a name removes them and updates the group panel. If they never opened the bot, Telegram opens it for them first. Removed people can tap Join to come back.
 - One wheel runs per chat. Tap **Exit** to close it: the starter or an admin can exit any time, and anyone can exit after 1 minute of no activity. Wheels with no activity for 10 minutes stop blocking new ones.
 - `/start` explains how to use the bot. `/credit` shows who made it. `/donate` shows KPay details from env variables, so phone numbers never go into the code.
 

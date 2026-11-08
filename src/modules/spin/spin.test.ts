@@ -3,13 +3,17 @@ import { describe, it } from "node:test";
 import {
   decodeCallback,
   decodePickChat,
+  decodeRemove,
   encodeCallback,
   encodePickChat,
+  encodeRemove,
   groupCountOptions,
   groupSizeOptions,
   hasCustomGroupCount,
   hasCustomGroupSize,
   hasCustomWinnerCount,
+  removeKeyboard,
+  removePageCount,
   winnerCountOptions,
 } from "./spin.keyboard.js";
 import { toVisualOrder } from "./spin.fonts.js";
@@ -117,6 +121,26 @@ describe("keyboard options", () => {
     assert.equal(decodePickChat(encodePickChat(-1001234567890)), -1001234567890);
     assert.equal(decodePickChat("p:abc"), null);
     assert.equal(decodePickChat("w:1:go"), null);
+  });
+});
+
+describe("remove list", () => {
+  it("round-trips remove buttons within the 64 byte limit", () => {
+    const remove = { wheelId: 2147483647, kind: "remove", userId: 9999999999, page: 12 } as const;
+    assert.ok(encodeRemove(remove).length <= 64);
+    assert.deepEqual(decodeRemove(encodeRemove(remove)), remove);
+    assert.deepEqual(decodeRemove(encodeRemove({ wheelId: 3, kind: "page", page: 1 })), { wheelId: 3, kind: "page", page: 1 });
+    assert.deepEqual(decodeRemove(encodeRemove({ wheelId: 3, kind: "done" })), { wheelId: 3, kind: "done" });
+    assert.equal(decodeRemove("r:abc:d"), null);
+    assert.equal(decodeRemove("w:1:x:2:0"), null);
+  });
+
+  it("pages the member list", () => {
+    assert.equal(removePageCount(0), 1);
+    assert.equal(removePageCount(8), 1);
+    assert.equal(removePageCount(9), 2);
+    const labels = removeKeyboard(1, makeMembers(10), 1).inline_keyboard.flat().map((button) => button.text);
+    assert.deepEqual(labels, ["Remove User 9", "Remove User 10", "Previous", "Done"]);
   });
 });
 

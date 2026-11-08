@@ -10,6 +10,7 @@ export type WheelAction =
   | "dice"
   | "j"
   | "l"
+  | "rm"
   | "start"
   | "tc"
   | "ts"
@@ -29,7 +30,7 @@ export interface WheelCallback {
   value?: number;
 }
 
-const ACTIONS: readonly WheelAction[] = [...MODE_ACTIONS, "j", "l", "start", "tc", "ts", "cc", "cs", "wc", "cw", "go", "back", "x"];
+const ACTIONS: readonly WheelAction[] = [...MODE_ACTIONS, "j", "l", "rm", "start", "tc", "ts", "cc", "cs", "wc", "cw", "go", "back", "x"];
 
 export function encodeCallback({ wheelId, action, value }: WheelCallback): string {
   return value === undefined ? `w:${wheelId}:${action}` : `w:${wheelId}:${action}:${value}`;
@@ -137,6 +138,7 @@ export function joinKeyboard(wheelId: number): InlineKeyboard {
     .text("Leave", encodeCallback({ wheelId, action: "l" }))
     .row()
     .text("Start", encodeCallback({ wheelId, action: "start" }))
+    .text("Remove", encodeCallback({ wheelId, action: "rm" }))
     .text("Exit", encodeCallback({ wheelId, action: "x" }));
 }
 
@@ -180,4 +182,69 @@ export function pickChatKeyboard(chats: { id: number; title: string }[]): Inline
     keyboard.text(chat.title, encodePickChat(chat.id)).row();
   });
   return keyboard;
+}
+
+export const REMOVE_PAGE_SIZE = 8;
+const MAX_REMOVE_LABEL = 40;
+
+export type RemoveCallback =
+  | { wheelId: number; kind: "page"; page: number }
+  | { wheelId: number; kind: "remove"; userId: number; page: number }
+  | { wheelId: number; kind: "done" };
+
+export function encodeRemove(callback: RemoveCallback): string {
+  switch (callback.kind) {
+    case "page":
+      return `r:${callback.wheelId}:p:${callback.page}`;
+    case "remove":
+      return `r:${callback.wheelId}:x:${callback.userId}:${callback.page}`;
+    case "done":
+      return `r:${callback.wheelId}:d`;
+  }
+}
+
+export function decodeRemove(data: string): RemoveCallback | null {
+  const [prefix, rawId, kind, first, second] = data.split(":");
+  const wheelId = Number(rawId);
+  if (prefix !== "r" || !Number.isInteger(wheelId)) {
+    return null;
+  }
+  if (kind === "d") {
+    return { wheelId, kind: "done" };
+  }
+  if (kind === "p" && Number.isInteger(Number(first))) {
+    return { wheelId, kind: "page", page: Number(first) };
+  }
+  if (kind === "x" && Number.isInteger(Number(first)) && Number.isInteger(Number(second))) {
+    return { wheelId, kind: "remove", userId: Number(first), page: Number(second) };
+  }
+  return null;
+}
+
+export function removePageCount(memberCount: number): number {
+  return Math.max(1, Math.ceil(memberCount / REMOVE_PAGE_SIZE));
+}
+
+function removeLabel(name: string): string {
+  const chars = [...name];
+  const short = chars.length > MAX_REMOVE_LABEL ? `${chars.slice(0, MAX_REMOVE_LABEL - 1).join("")}\u2026` : name;
+  return `Remove ${short}`;
+}
+
+export function removeKeyboard(wheelId: number, members: { id: string; name: string }[], page: number): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  const pages = removePageCount(members.length);
+  const current = Math.min(Math.max(page, 0), pages - 1);
+  members.slice(current * REMOVE_PAGE_SIZE, (current + 1) * REMOVE_PAGE_SIZE).forEach((member) => {
+    keyboard
+      .text(removeLabel(member.name), encodeRemove({ wheelId, kind: "remove", userId: Number(member.id), page: current }))
+      .row();
+  });
+  if (current > 0) {
+    keyboard.text("Previous", encodeRemove({ wheelId, kind: "page", page: current - 1 }));
+  }
+  if (current < pages - 1) {
+    keyboard.text("Next", encodeRemove({ wheelId, kind: "page", page: current + 1 }));
+  }
+  return keyboard.row().text("Done", encodeRemove({ wheelId, kind: "done" }));
 }
