@@ -7,16 +7,34 @@ interface RedisResponse {
   error?: string;
 }
 
+interface RestConnection {
+  url: string;
+  token: string;
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-async function command(args: (string | number)[]): Promise<unknown> {
-  const url = env.redisUrl;
-  const token = env.redisToken;
-  if (!url || !token) {
+export function toRestConnection(redisUrl: string): RestConnection | null {
+  try {
+    const parsed = new URL(redisUrl);
+    const token = decodeURIComponent(parsed.password);
+    if (!["redis:", "rediss:"].includes(parsed.protocol) || !parsed.hostname || !token) {
+      return null;
+    }
+    return { url: `https://${parsed.hostname}`, token };
+  } catch {
     return null;
   }
+}
+
+async function command(args: (string | number)[]): Promise<unknown> {
+  const connection = env.redisUrl ? toRestConnection(env.redisUrl) : null;
+  if (!connection) {
+    return null;
+  }
+  const { url, token } = connection;
 
   const response = await fetch(url, {
     method: "POST",

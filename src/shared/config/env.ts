@@ -34,9 +34,6 @@ export const env = {
     return process.env.DONATE_KBZPAY || null;
   },
   get redisUrl() {
-    return process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || null;
-  },
-  get redisToken() {
-    return process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || null;
+    return process.env.UPSTASH_REDIS_URL || null;
   },
 };

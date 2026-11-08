@@ -61,7 +61,7 @@ Bot:  posts the result as text and as an image
 
 When `/wheel` starts, the bot scans the full member list of the group. It logs in to Telegram's MTProto API with its own bot token (no user account), which needs `TG_API_ID` and `TG_API_HASH` from [my.telegram.org](https://my.telegram.org). The login session is stored in the `Setting` table, so it only signs in once.
 
-Scanning a big group takes a few seconds, so the scanned list can be cached in Redis for 10 minutes. Set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` (a free [Upstash](https://upstash.com) database, or the Upstash integration in the Vercel Marketplace, which sets `KV_REST_API_URL` and `KV_REST_API_TOKEN`). The bot talks to Redis over its REST API, so no extra package is needed. The cache for a chat is cleared when someone joins or leaves. Without Redis the bot scans on every `/wheel`.
+Scanning a big group takes a few seconds, so the scanned list can be cached in Redis for 10 minutes. Set `UPSTASH_REDIS_URL` to the Redis URL of a free [Upstash](https://upstash.com) database (`rediss://default:TOKEN@HOST:6379`). The bot turns it into Upstash's REST endpoint, so no extra package is needed. The cache for a chat is cleared when someone joins or leaves. Without Redis the bot scans on every `/wheel`.
 
 If those two values are not set, or the scan fails, the bot falls back to members it has seen: admins, people who joined after it was added, and anyone who sent a message (the bot must be an admin to see these). Anyone missing can tap **Join**.
 
@@ -96,8 +96,7 @@ Fill in `.env`:
 | `TG_API_HASH` | Optional. App api_hash from my.telegram.org |
 | `DONATE_NAME` | Optional. Account name shown by `/donate` |
 | `DONATE_KBZPAY` | Optional. KPay number shown by `/donate` |
-| `UPSTASH_REDIS_REST_URL` | Optional. Upstash Redis REST URL, caches member lists for 10 minutes |
-| `UPSTASH_REDIS_REST_TOKEN` | Optional. Upstash Redis REST token |
+| `UPSTASH_REDIS_URL` | Optional. Upstash Redis URL (`rediss://default:TOKEN@HOST:6379`), caches member lists for 10 minutes |
 
 ### 3. Create the database tables
 
