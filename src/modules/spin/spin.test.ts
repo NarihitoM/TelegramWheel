@@ -130,8 +130,8 @@ describe("remove list", () => {
     assert.ok(encodeRemove(remove).length <= 64);
     assert.deepEqual(decodeRemove(encodeRemove(remove)), remove);
     assert.deepEqual(decodeRemove(encodeRemove({ wheelId: 3, kind: "page", page: 1 })), { wheelId: 3, kind: "page", page: 1 });
-    assert.deepEqual(decodeRemove(encodeRemove({ wheelId: 3, kind: "done" })), { wheelId: 3, kind: "done" });
-    assert.equal(decodeRemove("r:abc:d"), null);
+    assert.deepEqual(decodeRemove(encodeRemove({ wheelId: 3, kind: "back" })), { wheelId: 3, kind: "back" });
+    assert.equal(decodeRemove("r:abc:b"), null);
     assert.equal(decodeRemove("w:1:x:2:0"), null);
   });
 
@@ -140,7 +140,7 @@ describe("remove list", () => {
     assert.equal(removePageCount(8), 1);
     assert.equal(removePageCount(9), 2);
     const labels = removeKeyboard(1, makeMembers(10), 1).inline_keyboard.flat().map((button) => button.text);
-    assert.deepEqual(labels, ["Remove User 9", "Remove User 10", "Previous", "Done"]);
+    assert.deepEqual(labels, ["Remove User 9", "Remove User 10", "Previous", "Back"]);
   });
 });
 

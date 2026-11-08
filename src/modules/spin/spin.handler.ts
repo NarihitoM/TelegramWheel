@@ -5,7 +5,6 @@ import { claimWheelCooldown, isGroupChat, listActiveChannels, saveChat } from ".
 import { listKnownMembers, loadChatMembers, rememberMembers, syncAdmins, toMember } from "../members/members.service.js";
 import { COIN_ANIMATION_MS, sendCoinSticker, showLoading, type AnimationName } from "./spin.animation.js";
 import { getStoredAvatars, syncChatAvatars, syncMissingAvatars, type AvatarMap } from "../members/avatar.service.js";
-import { START_MESSAGE } from "../start/start.handler.js";
 import { renderResultImages, renderWinnersImage } from "./spin.image.js";
 import {
   confirmKeyboard,
@@ -65,7 +64,6 @@ const DICE_EMOJI = "\u{1F3B2}";
 const CELEBRATION_EMOJI = "\u{1F389}";
 const DICE_ANIMATION_MS = 4_000;
 const MIN_LOADING_MS = 2_000;
-const REMOVE_START_PREFIX = "rm_";
 const CHAT_ACTION_INTERVAL_MS = 4_000;
 
 type ChatAction = "typing" | "upload_photo";
@@ -798,29 +796,25 @@ async function canManage(api: Api, wheel: Wheel, userId: number): Promise<boolea
   return userId === wheel.ownerId || (await isChatAdmin(api, wheel.chatId, userId));
 }
 
-function removeText(title: string, wheel: Wheel, page: number): string {
+function noPermission(wheel: Wheel): string {
+  return `You don't have permission to remove members here. Only ${wheel.ownerName} or an admin can.`;
+}
+
+function removeText(wheel: Wheel, page: number): string {
   const pages = removePageCount(wheel.members.length);
   const pageInfo = pages > 1 ? ` | Page ${Math.min(page, pages - 1) + 1} of ${pages}` : "";
   return [
     "<b>Remove members</b>",
-    escapeHtml(title),
-    "",
-    "Tap a name to remove that person from the wheel. Only you can see this list.",
-    "Removed people can tap Join in the group to come back.",
+    `Tap a name to remove that person. Only ${escapeHtml(wheel.ownerName)} or an admin can remove.`,
+    "Removed people can tap Join again after Back.",
     "",
     `Members: ${wheel.members.length}${pageInfo}`,
   ].join("\n");
 }
 
-async function sendRemoveList(api: Api, wheel: Wheel, userId: number): Promise<boolean> {
-  const title = await chatTitle(wheel.chatId);
-  const sent = await api
-    .sendMessage(userId, removeText(title, wheel, 0), {
-      parse_mode: "HTML",
-      reply_markup: removeKeyboard(wheel.id, wheel.members, 0),
-    })
-    .catch(() => null);
-  return sent !== null;
+async function showRemoveList(api: Api, wheel: Wheel, page: number): Promise<void> {
+  const current = Math.min(Math.max(page, 0), removePageCount(wheel.members.length) - 1);
+  await editPanel(api, wheel, removeText(wheel, current), removeKeyboard(wheel.id, wheel.members, current));
 }
 
 async function openRemoveList(ctx: Context & { from: User }, wheel: Wheel): Promise<void> {
@@ -829,81 +823,44 @@ async function openRemoveList(ctx: Context & { from: User }, wheel: Wheel): Prom
     return;
   }
   if (!(await canManage(ctx.api, wheel, ctx.from.id))) {
-    await ctx.answerCallbackQuery({ text: `Only ${wheel.ownerName} or an admin can remove members.`, show_alert: true });
+    await ctx.answerCallbackQuery({ text: noPermission(wheel), show_alert: true });
     return;
   }
-  if (await sendRemoveList(ctx.api, wheel, ctx.from.id)) {
-    await ctx.answerCallbackQuery({ text: "Check your private chat with the bot to choose who to remove." });
-    return;
-  }
-  await ctx.answerCallbackQuery({ url: `https://t.me/${ctx.me.username}?start=${REMOVE_START_PREFIX}${wheel.id}` });
+  await ctx.answerCallbackQuery();
+  await showRemoveList(ctx.api, wheel, 0);
 }
-
-spinHandler.command(["start", "help"], async (ctx) => {
-  const payload = ctx.match;
-  if (!payload.startsWith(REMOVE_START_PREFIX)) {
-    await ctx.reply(START_MESSAGE, { parse_mode: "HTML" });
-    return;
-  }
-  if (ctx.chat.type !== "private" || !ctx.from) {
-    return;
-  }
-
-  const wheel = await getWheel(Number(payload.slice(REMOVE_START_PREFIX.length)));
-  if (!wheel || wheel.step !== "joining") {
-    await ctx.reply("This wheel has already started or ended, so members can't be removed now.");
-    return;
-  }
-  if (!(await canManage(ctx.api, wheel, ctx.from.id))) {
-    await ctx.reply(`Only ${wheel.ownerName} or an admin can remove members.`);
-    return;
-  }
-  await sendRemoveList(ctx.api, wheel, ctx.from.id);
-});
 
 spinHandler.callbackQuery(/^r:/, async (ctx) => {
   const callback = decodeRemove(ctx.callbackQuery.data);
   const wheel = callback ? await getWheel(callback.wheelId) : null;
-  if (!callback || !wheel || wheel.step !== "joining") {
-    await ctx.answerCallbackQuery({
-      text: "This wheel has already started or ended, so members can't be removed now.",
-      show_alert: true,
-    });
-    await ctx.editMessageReplyMarkup().catch(() => undefined);
+  const panelId = ctx.callbackQuery.message?.message_id;
+  if (!callback || !wheel || wheel.step !== "joining" || wheel.messageId !== panelId) {
+    await ctx.answerCallbackQuery({ text: ENDED_MESSAGE, show_alert: true });
     return;
   }
   if (!(await canManage(ctx.api, wheel, ctx.from.id))) {
-    await ctx.answerCallbackQuery({ text: `Only ${wheel.ownerName} or an admin can remove members.`, show_alert: true });
+    await ctx.answerCallbackQuery({ text: noPermission(wheel), show_alert: true });
     return;
   }
 
-  if (callback.kind === "done") {
-    await ctx.answerCallbackQuery();
-    await ctx.editMessageText(`Done. ${wheel.members.length} members are in the wheel.`).catch(() => undefined);
-    return;
-  }
-
-  let current = wheel;
-  if (callback.kind === "remove") {
-    const name = wheel.members.find((member) => member.id === String(callback.userId))?.name ?? "This person";
-    const removed = await removeWheelMember(wheel.id, callback.userId);
-    await ctx.answerCallbackQuery({ text: removed ? `${name} removed.` : `${name} is not in the wheel.` });
-    current = (await getWheel(wheel.id)) ?? wheel;
-    if (removed) {
-      await showJoin(ctx.api, current);
+  switch (callback.kind) {
+    case "back": {
+      await ctx.answerCallbackQuery();
+      await showJoin(ctx.api, wheel);
+      return;
     }
-  } else {
-    await ctx.answerCallbackQuery();
+    case "page": {
+      await ctx.answerCallbackQuery();
+      await showRemoveList(ctx.api, wheel, callback.page);
+      return;
+    }
+    case "remove": {
+      const name = wheel.members.find((member) => member.id === String(callback.userId))?.name ?? "This person";
+      const removed = await removeWheelMember(wheel.id, callback.userId);
+      await ctx.answerCallbackQuery({ text: removed ? `${name} removed.` : `${name} is not in the wheel.` });
+      await showRemoveList(ctx.api, (await getWheel(wheel.id)) ?? wheel, callback.page);
+    }
   }
-
-  const page = Math.min(callback.page, removePageCount(current.members.length) - 1);
-  const title = await chatTitle(current.chatId);
-  await ctx
-    .editMessageText(removeText(title, current, page), {
-      parse_mode: "HTML",
-      reply_markup: removeKeyboard(current.id, current.members, page),
-    })
-    .catch(() => undefined);
 });
 
 spinHandler.callbackQuery(/^w:/, async (ctx) => {

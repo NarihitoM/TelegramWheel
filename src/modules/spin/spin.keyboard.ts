@@ -190,7 +190,7 @@ const MAX_REMOVE_LABEL = 40;
 export type RemoveCallback =
   | { wheelId: number; kind: "page"; page: number }
   | { wheelId: number; kind: "remove"; userId: number; page: number }
-  | { wheelId: number; kind: "done" };
+  | { wheelId: number; kind: "back" };
 
 export function encodeRemove(callback: RemoveCallback): string {
   switch (callback.kind) {
@@ -198,8 +198,8 @@ export function encodeRemove(callback: RemoveCallback): string {
       return `r:${callback.wheelId}:p:${callback.page}`;
     case "remove":
       return `r:${callback.wheelId}:x:${callback.userId}:${callback.page}`;
-    case "done":
-      return `r:${callback.wheelId}:d`;
+    case "back":
+      return `r:${callback.wheelId}:b`;
   }
 }
 
@@ -209,8 +209,8 @@ export function decodeRemove(data: string): RemoveCallback | null {
   if (prefix !== "r" || !Number.isInteger(wheelId)) {
     return null;
   }
-  if (kind === "d") {
-    return { wheelId, kind: "done" };
+  if (kind === "b") {
+    return { wheelId, kind: "back" };
   }
   if (kind === "p" && Number.isInteger(Number(first))) {
     return { wheelId, kind: "page", page: Number(first) };
@@ -246,5 +246,5 @@ export function removeKeyboard(wheelId: number, members: { id: string; name: str
   if (current < pages - 1) {
     keyboard.text("Next", encodeRemove({ wheelId, kind: "page", page: current + 1 }));
   }
-  return keyboard.row().text("Done", encodeRemove({ wheelId, kind: "done" }));
+  return keyboard.row().text("Back", encodeRemove({ wheelId, kind: "back" }));
 }
