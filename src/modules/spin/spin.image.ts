@@ -19,18 +19,19 @@ const MAX_COLUMNS = 4;
 const MAX_NAMES_PER_CARD = 15;
 const HEADER_HEIGHT = 180;
 const CARD_TITLE_HEIGHT = 64;
-const NAME_HEIGHT = 34;
 const CARD_PADDING = 40;
+const CARD_INNER_PADDING = 20;
+const NAME_FONT_SIZE = 22;
+const NAME_HEIGHT = 34;
+const MAX_NAME_LINES = 3;
 const MAX_HEIGHT = 8000;
 
 const NAME_STYLE: Style = {
   display: "block",
-  fontSize: 22,
+  fontSize: NAME_FONT_SIZE,
   lineHeight: `${NAME_HEIGHT}px`,
-  height: NAME_HEIGHT,
-  whiteSpace: "nowrap",
+  wordBreak: "break-word",
   overflow: "hidden",
-  textOverflow: "ellipsis",
 };
 
 const COLORS = ["#ef4444", "#f59e0b", "#10b981", "#3b82f6", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"];
@@ -39,18 +40,40 @@ function h(type: string, style: Style, children?: string | OgNode | OgNode[]): O
   return { type, props: { style, children } };
 }
 
-function cardHeight(size: number): number {
-  const lines = Math.min(size, MAX_NAMES_PER_CARD) + (size > MAX_NAMES_PER_CARD ? 1 : 0);
+function charWidth(char: string): number {
+  const code = char.codePointAt(0) ?? 0;
+  return code >= 0x2e80 ? 1.05 : 0.62;
+}
+
+export function estimateLines(text: string, width: number, fontSize = NAME_FONT_SIZE): number {
+  const textWidth = [...text].reduce((total, char) => total + charWidth(char) * fontSize, 0);
+  return Math.min(MAX_NAME_LINES, Math.max(1, Math.ceil(textWidth / width)));
+}
+
+function nameLines(members: Member[], width: number): number[] {
+  const lines = members
+    .slice(0, MAX_NAMES_PER_CARD)
+    .map((member, index) => estimateLines(`${index + 1}. ${member.name}`, width));
+  return members.length > MAX_NAMES_PER_CARD ? [...lines, 1] : lines;
+}
+
+function cardHeight(members: Member[], width: number): number {
+  const lines = nameLines(members, width).reduce((total, count) => total + count, 0);
   return CARD_TITLE_HEIGHT + lines * NAME_HEIGHT + CARD_PADDING;
 }
 
 function card(title: string, members: Member[], color: string, width: number, height: number): OgNode {
+  const lines = nameLines(members, width - CARD_INNER_PADDING * 2);
   const names = members.slice(0, MAX_NAMES_PER_CARD).map((member, index) =>
-    h("div", { ...NAME_STYLE, color: "#e5e7eb" }, `${index + 1}. ${toVisualOrder(member.name)}`),
+    h(
+      "div",
+      { ...NAME_STYLE, maxHeight: (lines[index] ?? 1) * NAME_HEIGHT, color: "#e5e7eb" },
+      `${index + 1}. ${toVisualOrder(member.name)}`,
+    ),
   );
   if (members.length > MAX_NAMES_PER_CARD) {
     names.push(
-      h("div", { ...NAME_STYLE, color: "#9ca3af" }, `+${members.length - MAX_NAMES_PER_CARD} more`),
+      h("div", { ...NAME_STYLE, maxHeight: NAME_HEIGHT, color: "#9ca3af" }, `+${members.length - MAX_NAMES_PER_CARD} more`),
     );
   }
 
@@ -61,7 +84,7 @@ function card(title: string, members: Member[], color: string, width: number, he
       flexDirection: "column",
       width,
       height,
-      padding: 20,
+      padding: CARD_INNER_PADDING,
       borderRadius: 20,
       backgroundColor: "#1f2937",
       borderTop: `8px solid ${color}`,
@@ -71,19 +94,36 @@ function card(title: string, members: Member[], color: string, width: number, he
   );
 }
 
+function chunk<T>(items: T[], size: number): T[][] {
+  return Array.from({ length: Math.ceil(items.length / size) }, (_, index) => items.slice(index * size, (index + 1) * size));
+}
+
 export async function renderResultImage(result: SpinResult, chatTitle: string): Promise<Buffer> {
   const columns = Math.min(result.teams.length, MAX_COLUMNS);
   const cardWidth = Math.floor((WIDTH - PADDING * 2 - GAP * (columns - 1)) / columns);
-  const rowHeight = cardHeight(Math.max(...result.teams.map((team) => team.length))) + GAP;
+  const textWidth = cardWidth - CARD_INNER_PADDING * 2;
 
-  const maxRows = Math.max(1, Math.floor((MAX_HEIGHT - HEADER_HEIGHT - PADDING * 2) / rowHeight));
-  const shownTeams = result.teams.slice(0, maxRows * columns);
+  const rows: { teams: Member[][]; height: number }[] = [];
+  let used = HEADER_HEIGHT + PADDING * 2;
+  for (const teams of chunk(result.teams, columns)) {
+    const height = Math.max(...teams.map((team) => cardHeight(team, textWidth)));
+    if (rows.length > 0 && used + height + GAP > MAX_HEIGHT) {
+      break;
+    }
+    rows.push({ teams, height });
+    used += height + GAP;
+  }
+
+  const shownTeams = rows.flatMap((row) => row.teams);
   const hiddenTeams = result.teams.length - shownTeams.length;
-  const rows = Math.ceil(shownTeams.length / columns);
-  const height = HEADER_HEIGHT + PADDING * 2 + rows * rowHeight;
+  const height = used;
 
-  const cards = shownTeams.map((team, index) =>
-    card(`Group ${index + 1}`, team, COLORS[index % COLORS.length] ?? "#3b82f6", cardWidth, rowHeight - GAP),
+  let groupNumber = 0;
+  const cards = rows.flatMap((row) =>
+    row.teams.map((team) => {
+      const index = groupNumber++;
+      return card(`Group ${index + 1}`, team, COLORS[index % COLORS.length] ?? "#3b82f6", cardWidth, row.height);
+    }),
   );
 
   const totalMembers = result.teams.flat().length;

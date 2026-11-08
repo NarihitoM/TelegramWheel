@@ -11,6 +11,7 @@ import {
   hasCustomGroupSize,
 } from "./spin.keyboard.js";
 import { toVisualOrder } from "./spin.fonts.js";
+import { estimateLines } from "./spin.image.js";
 import { chunkLines, describeSplit, formatResult } from "./spin.message.js";
 import { isValidConfig, shuffle, splitIntoTeams } from "./spin.service.js";
 import type { Member } from "./spin.types.js";
@@ -147,5 +148,13 @@ describe("describeSplit", () => {
     assert.equal(describeSplit(8, 1, 8), "8 groups, each with 1 member");
     assert.equal(describeSplit(2, 5, 10), "2 groups, each with 5 members");
     assert.equal(describeSplit(3, 2, 7), "3 groups, each with 2 members, plus 1 extra group with 1 member");
+  });
+});
+
+describe("estimateLines", () => {
+  it("wraps long names onto more lines, up to 3", () => {
+    assert.equal(estimateLines("1. R _", 226), 1);
+    assert.equal(estimateLines("1. Oakar Min Htin {Riae_}", 226), 2);
+    assert.equal(estimateLines("1. " + "x".repeat(500), 226), 3);
   });
 });
